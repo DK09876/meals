@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly Meals snapshot
+
+[Timer]
+OnCalendar=*-*-* 03:50:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

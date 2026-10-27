@@ -1,0 +1,10 @@
+[Unit]
+Description=Snapshot the Meals database
+After=meals.service
+
+[Service]
+Type=oneshot
+User=admin
+WorkingDirectory=/home/admin/development/meals
+Environment=MEALS_DB_PATH=/home/admin/development/meals/data/meals.db
+ExecStart=/home/admin/development/meals/scripts/backup.sh --verify

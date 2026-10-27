@@ -1,0 +1,19 @@
+[Unit]
+Description=Meals (Next.js) on the Pi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/development/meals
+Environment=NODE_ENV=production
+Environment=MEALS_DB_PATH=/home/admin/development/meals/data/meals.db
+ExecStart=/usr/bin/npx next start -H 127.0.0.1 -p 3003
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

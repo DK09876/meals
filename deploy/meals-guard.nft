@@ -1,0 +1,22 @@
+# Keeps the meals Tailscale node to the meals app and nothing else on the Pi.
+#
+# A userspace tailscaled hands every connection to its 100.x address on to
+# the Pi's own localhost, whatever the port - so a friend the mtg and gains
+# nodes are shared with can reach SSH (22) and LifeOS (3000) through them.
+# This node runs as its own user, ts-meals, and this rule lets that user
+# reach only port 3003 on the Pi itself (plus DNS, which tailscaled needs to
+# find its control server). The internet - DERP relays, the control plane,
+# other tailnet machines - is untouched.
+#
+# Loaded by tailscaled-meals.service before it starts; safe to load again.
+
+table inet meals_guard {}
+flush table inet meals_guard
+
+table inet meals_guard {
+  chain output {
+    type filter hook output priority filter; policy accept;
+    meta skuid "ts-meals" fib daddr type local tcp dport != { 53, 3003 } reject with tcp reset
+    meta skuid "ts-meals" fib daddr type local udp dport != 53 reject
+  }
+}

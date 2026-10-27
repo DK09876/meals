@@ -1,0 +1,43 @@
+[Unit]
+Description=Tailscale node for Meals (own identity, userspace, can reach only the meals app)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+# Its own unprivileged user, so the nft rule in meals-guard.nft can tell its
+# connections apart from everyone else's. Created once with:
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin ts-meals
+User=ts-meals
+Group=ts-meals
+# "+" runs this one step as root: the guard is in place before the node is up.
+ExecStartPre=+/usr/sbin/nft -f /home/admin/development/meals/deploy/meals-guard.nft
+# --statedir, not --state: the directory is also the var root, and without one
+# tailscaled has nowhere to keep the TLS certificate, so HTTPS fails with
+# "no TailscaleVarRoot". systemd creates both directories, owned by ts-meals.
+ExecStart=/usr/sbin/tailscaled \
+  --statedir=/var/lib/tailscale-meals \
+  --socket=/run/tailscale-meals/tailscaled.sock \
+  --tun=userspace-networking \
+  --port=0
+StateDirectory=tailscale-meals
+StateDirectoryMode=0700
+RuntimeDirectory=tailscale-meals
+Restart=on-failure
+RestartSec=5
+# Userspace networking needs no privileges; take them all away.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target

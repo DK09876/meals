@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+/*
+ * Light only, on purpose: the app is read in a kitchen, often by someone
+ * older, and her handouts are black on white. Colours were checked for 4.5:1
+ * contrast; status is never told by colour alone (each check has an icon).
+ */
+:root {
+  --bg: #f4f5f1;
+  --surface: #ffffff;
+  --field: #e7e9e3;
+  --line: #e2e5df;
+  --line-soft: #eceee9;
+  --line-strong: #c9cfc6;
+  --ink: #1b231e;
+  --ink-2: #4a524d;
+  --muted: #56605a;
+  --accent: #2e6b4e;
+  --accent-ink: #1f4d37;
+  --accent-soft: #e3efe8;
+  --ok-bg: #e4f1e9;
+  --ok-fg: #1d5c3e;
+  --warn-bg: #fbefd9;
+  --warn-fg: #7a4300;
+  --fail-bg: #fbe4e1;
+  --fail-fg: #9b2318;
+  --fail-bar: #b3261e;
+  --plate-veg: #5e9e6b;
+  --plate-starch: #d9a441;
+  --plate-protein: #c8714a;
+  --plate-fruit: #b5577a;
+  --plate-milk: #6c8fb8;
+  --plate-fat: #7d7a4e;
+  --plate-empty: #eceee9;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-fg: var(--ok-fg);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-fg: var(--warn-fg);
+  --color-fail-bg: var(--fail-bg);
+  --color-fail-fg: var(--fail-fg);
+  --color-fail-bar: var(--fail-bar);
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* Page gutters that clear the notch in landscape. */
+.safe-x {
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+}
+
+@layer components {
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 18px; }
+  .label { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 999px; font-size: 14px; font-weight: 700; line-height: 1.2; }
+  .btn { min-height: 52px; border-radius: 14px; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--ink); border: 1.5px solid var(--line-strong); }
+  .btn:disabled { background: var(--field); color: #5f6862; border-color: transparent; }
+  .iconbtn, .step { width: 44px; height: 44px; border-radius: 12px; border: 1.5px solid var(--line-strong); background: var(--surface); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .step:disabled { opacity: .4; }
+  .listrow { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line-soft); }
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* On touch screens: no grey flash on tap, no wait for a double-tap zoom, and
+   form fields at 16px - iOS zooms into anything smaller and stays zoomed. */
+@media (pointer: coarse) {
+  a, button, label { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  input, select, textarea { font-size: max(16px, 1em) !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
