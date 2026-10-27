@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           # Matches the Pi, so CI cannot pass on a version the Pi will not run.
-          node-version: '22'
+          node-version: '20'
           cache: npm
 
       # lib/backup-script.test.ts runs the real backup script.
