@@ -1,0 +1,120 @@
+import { describe, expect, it } from 'vitest';
+
+import { cleanRuleChanges, DEFAULT_RULES, evaluate, limitsFor, totals, type Item } from './rules';
+
+const it_ = (food: string, servings = 1): Item => ({ food, servings });
+const kinds = (items: Item[], type: Parameters<typeof evaluate>[1], ctx?: Parameters<typeof evaluate>[3]) =>
+  Object.fromEntries(evaluate(items, type, DEFAULT_RULES, ctx).checks.map((c) => [c.kind, c.status]));
+
+describe('totals', () => {
+  it('adds up servings, counting veggies by her handout', () => {
+    const t = totals([it_('brownrice', 1.5), it_('broccoli'), it_('salmon')]);
+    expect(t.carbs).toBeCloseTo(27.5);
+    expect(t.vegServings).toBe(1);
+    expect(t.pairedCarbs).toBeCloseTo(22.5); // veggies need no pairing
+    expect(t.cholesterol).toBe(54);
+  });
+
+  it('refuses a food that is not in the table', () => {
+    expect(() => totals([it_('bacon')])).toThrow(/Unknown food/);
+  });
+});
+
+describe('carbs', () => {
+  it('passes at exactly the limit, as shown', () => {
+    // 20 + 15 = 35
+    expect(kinds([it_('lentils'), it_('apple'), it_('chicken')], 'lunch').carbs).toBe('ok');
+  });
+
+  it('fails one gram over and says by how much', () => {
+    const e = evaluate([it_('lentils'), it_('apple'), it_('wwbread', 0.5), it_('chicken')], 'lunch', DEFAULT_RULES);
+    expect(e.verdict).toEqual({ status: 'fail', text: 'Too many carbs: 6 g over' });
+    expect(e.fits).toBe(false);
+    expect(e.fitsAnyDay).toBe(false);
+  });
+
+  it('uses the snack limit for snacks', () => {
+    expect(limitsFor('snack', DEFAULT_RULES)).toEqual({ carbs: 15, sodium: 300, satFat: 2 });
+    expect(kinds([it_('apple'), it_('pb')], 'snack').carbs).toBe('fail'); // 18 g
+    expect(kinds([it_('apple', 0.5), it_('pb')], 'snack').carbs).toBe('ok');
+  });
+
+  it("follows her plan's sample menu down: ⅔ cup rice plus veggies is over 35", () => {
+    expect(kinds([it_('salmon'), it_('brownrice', 2), it_('broccoli'), it_('carrots')], 'dinner').carbs).toBe('fail');
+  });
+});
+
+describe('pairing', () => {
+  it('fails a carb on its own', () => {
+    expect(kinds([it_('apple')], 'snack').pairing).toBe('fail');
+  });
+
+  it('passes apple with peanut butter, her own example', () => {
+    expect(kinds([it_('apple', 0.5), it_('pb')], 'snack').pairing).toBe('ok');
+  });
+
+  it("does not count toast's own protein as a pairing", () => {
+    expect(kinds([it_('wwbread')], 'breakfast').pairing).toBe('fail');
+  });
+
+  it('is not asked of veggies and nuts', () => {
+    expect(kinds([it_('carrots'), it_('cucumber')], 'snack').pairing).toBeUndefined();
+  });
+});
+
+describe('sodium and saturated fat', () => {
+  it('fails a salty meal', () => {
+    // 4 tsp low-sodium soy is 760 mg
+    expect(kinds([it_('chicken'), it_('lssoy', 4), it_('broccoli', 2)], 'dinner').sodium).toBe('fail');
+  });
+
+  it('only warns on saturated fat - her handout says limit, not never', () => {
+    const e = evaluate([it_('pb', 2), it_('wwbread'), it_('broccoli', 2)], 'lunch', DEFAULT_RULES);
+    expect(e.checks.find((c) => c.kind === 'satFat')?.status).toBe('ok');
+    const heavy = evaluate([it_('egg', 2), it_('pb'), it_('wwbread')], 'breakfast', DEFAULT_RULES);
+    expect(heavy.checks.find((c) => c.kind === 'satFat')?.status).toBe('warn');
+  });
+});
+
+describe('the plate', () => {
+  it('tips toward half veggies at lunch and dinner only', () => {
+    expect(kinds([it_('chicken'), it_('quinoa')], 'dinner').veg).toBe('warn');
+    expect(kinds([it_('chicken'), it_('quinoa'), it_('greens', 2)], 'dinner').veg).toBe('ok');
+    expect(kinds([it_('oats'), it_('greekyog')], 'breakfast').veg).toBeUndefined();
+  });
+
+  it('still fits with only a tip', () => {
+    const e = evaluate([it_('chicken'), it_('quinoa')], 'dinner', DEFAULT_RULES);
+    expect(e.verdict).toEqual({ status: 'warn', text: 'Fits her plan, with one tip' });
+    expect(e.fits).toBe(true);
+  });
+});
+
+describe('what she already ate', () => {
+  it('counts egg yolks over the week', () => {
+    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 0, yolksThisWeek: 2 }).yolks).toBe('ok');
+    const over = evaluate([it_('egg')], 'breakfast', DEFAULT_RULES, { cholesterolToday: 0, yolksThisWeek: 3 });
+    expect(over.fits).toBe(false);
+    // Fine to keep - it fits again once the week moves on.
+    expect(over.fitsAnyDay).toBe(true);
+  });
+
+  it("counts cholesterol against today's total", () => {
+    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 9, yolksThisWeek: 0 }).cholesterol).toBe('ok'); // 195
+    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 20, yolksThisWeek: 0 }).cholesterol).toBe('fail'); // 206
+  });
+});
+
+describe('cleanRuleChanges', () => {
+  it('takes known rules within range', () => {
+    expect(cleanRuleChanges({ carbMeal: 30, sodiumMeal: 500 })).toEqual({ carbMeal: 30, sodiumMeal: 500 });
+  });
+
+  it('refuses anything else', () => {
+    expect(cleanRuleChanges({ carbMeal: 5 })).toBeNull();
+    expect(cleanRuleChanges({ carbMeal: '30' })).toBeNull();
+    expect(cleanRuleChanges({ sugar: 10 })).toBeNull();
+    expect(cleanRuleChanges({})).toBeNull();
+    expect(cleanRuleChanges(null)).toBeNull();
+  });
+});
