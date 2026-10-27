@@ -24,7 +24,7 @@ const db = new Database(DB_PATH);
 
 // Same shape as lib/db.ts; a profile made here starts on the default limits.
 db.run(`CREATE TABLE IF NOT EXISTS profiles (id TEXT PRIMARY KEY, name TEXT NOT NULL, rules TEXT NOT NULL, rulesUpdatedAt TEXT NOT NULL, createdAt TEXT NOT NULL)`);
-const DEFAULT_RULES = { carbMeal: 35, carbSnack: 15, sodiumMeal: 600, satFatMeal: 4, cholesterolDay: 200, yolksWeek: 3 };
+const DEFAULT_RULES = { carbMeal: 35, carbSnack: 15, sodiumMeal: 600, satFatPct: 5, calorieDay: 1600, cholesterolDay: 200, yolksWeek: 3 };
 const has = (table) => !!db.get("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [table]);
 
 const [command, id, name] = process.argv.slice(2);

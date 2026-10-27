@@ -7,7 +7,7 @@
 
 import { useData } from '@/components/DataProvider';
 import { Stepper } from '@/components/ui';
-import { RULE_KEYS, RULE_SETTINGS } from '@/lib/rules';
+import { RULE_KEYS, RULE_SETTINGS, satFatBudget } from '@/lib/rules';
 
 const NEVER = ['Organ meats', 'Fried food', 'Bacon', 'Sausage', 'Deli meats', 'Hot dogs', 'Butter', 'Full-fat cheese', 'Cream', 'Coconut oil', 'Pastries', 'Sugary drinks'];
 
@@ -30,6 +30,8 @@ export default function PlanPage() {
                 <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
                   <span className="font-bold">{s.label}</span>
                   <span className={`chip px-2.5 py-0.5 text-[13px] ${s.confirmed ? 'bg-ok-bg text-ok-fg' : 'bg-warn-bg text-warn-fg'}`}>{s.source}</span>
+                  {key === 'satFatPct' && <span className="text-sm text-muted">About {satFatBudget(state.rules)} g a day at {state.rules.calorieDay} kcal</span>}
+                  {key === 'calorieDay' && <span className="text-sm text-muted">Only used to work out her saturated fat in grams</span>}
                 </span>
                 <Stepper
                   value={shown}

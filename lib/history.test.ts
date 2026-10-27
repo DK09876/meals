@@ -29,7 +29,7 @@ describe('contextFrom', () => {
       entry('c', at(21), [{ food: 'egg', servings: 1 }]), // 6 days ago: still this week
       entry('d', at(20), [{ food: 'egg', servings: 1 }]), // 7 days ago: not
     ];
-    expect(contextFrom(log, now)).toEqual({ cholesterolToday: 9, yolksThisWeek: 2 });
+    expect(contextFrom(log, now)).toEqual({ cholesterolToday: 9, satFatToday: 0.2, yolksThisWeek: 2 });
   });
 });
 

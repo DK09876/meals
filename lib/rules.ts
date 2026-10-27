@@ -4,12 +4,14 @@
  * Where each rule comes from:
  * - Carbs per meal (35 g), and "a carb always comes with a protein or fat":
  *   her care team.
- * - Cholesterol under 200 mg a day, and 2-4 egg yolks a week: her LDL handout.
+ * - Cholesterol under 200 mg a day, saturated fat no more than 5% of the
+ *   day's calories, and 2-4 egg yolks a week: her LDL handout.
  * - Unlimited non-starchy veggies (counted at 5 g each, see foods.ts), half
  *   the plate at lunch and dinner: her diabetes handouts.
- * - Carbs per snack, sodium and saturated fat per meal: assumptions, since
- *   her papers say only "low sodium" and "limit saturated fat". The Plan
- *   screen labels them "please confirm" and lets the family change them.
+ * - Carbs per snack and sodium per meal: assumptions, since her papers say
+ *   only "low sodium". So is her daily calorie target, which turns the 5%
+ *   into grams. The Plan screen labels these "please confirm" and lets the
+ *   family change them.
  *
  * Where her diabetes and cholesterol handouts disagree (bacon and butter are
  * on the diabetes fat list), the stricter one wins: those foods are simply not
@@ -38,7 +40,10 @@ export interface Rules {
   carbMeal: number;
   carbSnack: number;
   sodiumMeal: number;
-  satFatMeal: number;
+  /** Saturated fat as a share of the day's calories, in percent. */
+  satFatPct: number;
+  /** Her daily calorie target - only used to turn satFatPct into grams. */
+  calorieDay: number;
   cholesterolDay: number;
   yolksWeek: number;
 }
@@ -47,7 +52,8 @@ export const DEFAULT_RULES: Rules = {
   carbMeal: 35,
   carbSnack: 15,
   sodiumMeal: 600,
-  satFatMeal: 4,
+  satFatPct: 5,
+  calorieDay: 1600,
   cholesterolDay: 200,
   yolksWeek: 3,
 };
@@ -57,7 +63,8 @@ export const RULE_SETTINGS: Record<keyof Rules, { label: string; unit: string; s
   carbMeal: { label: 'Carbs per meal', unit: 'g', step: 5, min: 15, max: 75, source: 'Her care team', confirmed: true },
   carbSnack: { label: 'Carbs per snack', unit: 'g', step: 5, min: 5, max: 30, source: 'Guess · please confirm', confirmed: false },
   sodiumMeal: { label: 'Sodium per meal', unit: 'mg', step: 50, min: 300, max: 1200, source: 'Guess · please confirm', confirmed: false },
-  satFatMeal: { label: 'Saturated fat per meal', unit: 'g', step: 1, min: 1, max: 10, source: 'Guess · please confirm', confirmed: false },
+  satFatPct: { label: 'Saturated fat, share of calories', unit: '%', step: 1, min: 3, max: 10, source: 'Her handout', confirmed: true },
+  calorieDay: { label: 'Calories per day', unit: 'kcal', step: 100, min: 1000, max: 3000, source: 'Guess · ask her dietitian', confirmed: false },
   cholesterolDay: { label: 'Cholesterol per day', unit: 'mg', step: 25, min: 100, max: 300, source: 'Her handout', confirmed: true },
   yolksWeek: { label: 'Egg yolks per week', unit: '', step: 1, min: 0, max: 7, source: 'Her handout: 2 to 4', confirmed: true },
 };
@@ -76,6 +83,12 @@ export function cleanRuleChanges(input: unknown): Partial<Rules> | null {
   }
   return Object.keys(out).length ? out : null;
 }
+
+/**
+ * Her saturated fat for a whole day, in grams: the share of her calories,
+ * at 9 kcal a gram. 5% of 1,600 kcal is 8.9 g.
+ */
+export const satFatBudget = (rules: Rules) => Math.round((rules.calorieDay * rules.satFatPct) / 100 / 9 * 10) / 10;
 
 export interface Item {
   food: string;
@@ -120,10 +133,11 @@ export function totals(items: Item[]): Totals {
 /** What she has already had, for the checks that depend on it. */
 export interface Context {
   cholesterolToday: number;
+  satFatToday: number;
   yolksThisWeek: number;
 }
 
-export const NOTHING_EATEN: Context = { cholesterolToday: 0, yolksThisWeek: 0 };
+export const NOTHING_EATEN: Context = { cholesterolToday: 0, satFatToday: 0, yolksThisWeek: 0 };
 
 export type Status = 'ok' | 'warn' | 'fail';
 export type CheckKind = 'carbs' | 'pairing' | 'sodium' | 'satFat' | 'veg' | 'yolks' | 'cholesterol';
@@ -138,16 +152,14 @@ export interface Check {
 export interface Limits {
   carbs: number;
   sodium: number;
-  satFat: number;
 }
 
-/** A snack gets its own carb limit, and half a meal's sodium and saturated fat. */
+/** A snack gets its own carb limit, and half a meal's sodium. */
 export function limitsFor(type: MealType, rules: Rules): Limits {
   const snack = type === 'snack';
   return {
     carbs: snack ? rules.carbSnack : rules.carbMeal,
     sodium: snack ? rules.sodiumMeal / 2 : rules.sodiumMeal,
-    satFat: snack ? rules.satFatMeal / 2 : rules.satFatMeal,
   };
 }
 
@@ -199,11 +211,13 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
     ? { kind: 'sodium', status: 'ok', text: `Sodium ${sodium} mg`, situational: false }
     : { kind: 'sodium', status: 'fail', text: `Sodium ${sodium} mg, too salty`, situational: false });
 
-  // Saturated fat is a soft limit: her handout says "limit", not "never".
-  const satFat = round1(t.satFat);
-  checks.push(satFat <= limits.satFat
-    ? { kind: 'satFat', status: 'ok', text: `Sat. fat ${satFat} g`, situational: false }
-    : { kind: 'satFat', status: 'warn', text: `Sat. fat ${satFat} g, a bit high`, situational: false });
+  // Saturated fat is a daily budget, like cholesterol: her handout gives it
+  // as a share of the whole day's calories, not per meal.
+  const budget = satFatBudget(rules);
+  const satFatDay = round1(context.satFatToday + t.satFat);
+  checks.push(satFatDay <= budget
+    ? { kind: 'satFat', status: 'ok', text: `Sat. fat ${satFatDay} of ${budget} g today`, situational: true }
+    : { kind: 'satFat', status: 'fail', text: 'Over her saturated fat for today', situational: true });
 
   // The plate method: half the plate veggies at lunch and dinner. Breakfast's
   // half can be empty or fruit, and a snack has no plate. A tip, not a rule.

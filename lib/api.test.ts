@@ -49,7 +49,7 @@ describe('profiles', () => {
   it('starts a new person on the default limits', async () => {
     const r = await grandma();
     const s = await state(r);
-    expect(s.rules).toEqual({ carbMeal: 35, carbSnack: 15, sodiumMeal: 600, satFatMeal: 4, cholesterolDay: 200, yolksWeek: 3 });
+    expect(s.rules).toEqual({ carbMeal: 35, carbSnack: 15, sodiumMeal: 600, satFatPct: 5, calorieDay: 1600, cholesterolDay: 200, yolksWeek: 3 });
     expect(s).toMatchObject({ saved: [], pantry: [], custom: [], log: [] });
   });
 
