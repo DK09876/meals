@@ -13,7 +13,7 @@ import { Icon, SaveButton, Verdict } from '@/components/ui';
 import { FOODS } from '@/lib/foods';
 import { itemLabel } from '@/lib/format';
 import { daysAgo } from '@/lib/history';
-import { evaluate, mealTypeLabel, type Status } from '@/lib/rules';
+import { evaluate, mealTypeLabel, satFatBudget, type Status } from '@/lib/rules';
 
 export default function MealPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,11 +38,13 @@ export default function MealPage() {
   const e = evaluate(meal.items, meal.type, state.rules, context);
   const t = e.totals;
   const cholAfter = Math.round(context.cholesterolToday + t.cholesterol);
+  const satAfter = Math.round((context.satFatToday + t.satFat) * 10) / 10;
+  const satBudget = satFatBudget(state.rules);
   const rows: Array<{ label: string; value: string; note: string; status?: Status }> = [
     { label: 'Carbs', value: `${Math.round(t.carbs)} g`, note: `limit ${e.limits.carbs} g`, status: Math.round(t.carbs) <= e.limits.carbs ? 'ok' : 'fail' },
     { label: 'Protein', value: `${Math.round(t.protein)} g`, note: t.pairedCarbs > 0 ? 'pairs the carbs' : '' },
     { label: 'Fat', value: `${Math.round(t.fat)} g`, note: '' },
-    { label: 'Saturated fat', value: `${Math.round(t.satFat * 10) / 10} g`, note: `limit ${e.limits.satFat} g`, status: Math.round(t.satFat * 10) / 10 <= e.limits.satFat ? 'ok' : 'warn' },
+    { label: 'Saturated fat', value: `${Math.round(t.satFat * 10) / 10} g`, note: `today ${satAfter} of ${satBudget} g`, status: satAfter <= satBudget ? 'ok' : 'fail' },
     { label: 'Sodium', value: `${Math.round(t.sodium)} mg`, note: `limit ${e.limits.sodium} mg`, status: Math.round(t.sodium) <= e.limits.sodium ? 'ok' : 'fail' },
     { label: 'Cholesterol', value: `${Math.round(t.cholesterol)} mg`, note: `today ${cholAfter} of ${state.rules.cholesterolDay} mg`, status: cholAfter <= state.rules.cholesterolDay ? 'ok' : 'fail' },
   ];

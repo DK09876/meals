@@ -1,6 +1,6 @@
 /**
  * What she has eaten, and what it means for the checks that look back:
- * cholesterol today, egg yolks over the last seven days.
+ * cholesterol and saturated fat today, egg yolks over the last seven days.
  *
  * Days are the phone's local days. Each log entry keeps a copy of the meal's
  * items, so deleting a built meal later does not rewrite what she ate.
@@ -30,15 +30,19 @@ export const WEEK_DAYS = 7;
 
 export function contextFrom(log: LogEntry[], now: Date): Context {
   let cholesterolToday = 0;
+  let satFatToday = 0;
   let yolksThisWeek = 0;
   for (const entry of log) {
     const ago = daysAgo(entry.eatenAt, now);
     if (ago < 0 || ago >= WEEK_DAYS) continue;
     const t = totals(entry.items);
-    if (ago === 0) cholesterolToday += t.cholesterol;
+    if (ago === 0) {
+      cholesterolToday += t.cholesterol;
+      satFatToday += t.satFat;
+    }
     yolksThisWeek += t.yolks;
   }
-  return { cholesterolToday, yolksThisWeek };
+  return { cholesterolToday, satFatToday, yolksThisWeek };
 }
 
 export function dayLabel(iso: string, now: Date): string {

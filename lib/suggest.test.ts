@@ -15,7 +15,7 @@ describe('ideas', () => {
   });
 
   it('drops a meal that would go over this week\'s egg yolks', () => {
-    const list = ids(ideas(CATALOG, { ...base, type: 'breakfast', context: { cholesterolToday: 0, yolksThisWeek: 3 } }));
+    const list = ids(ideas(CATALOG, { ...base, type: 'breakfast', context: { ...NOTHING_EATEN, yolksThisWeek: 3 } }));
     expect(list).not.toContain('veggie-omelet');
     expect(list.length).toBeGreaterThan(0);
   });

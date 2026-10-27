@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cleanRuleChanges, DEFAULT_RULES, evaluate, limitsFor, totals, type Item } from './rules';
+import { cleanRuleChanges, DEFAULT_RULES, evaluate, limitsFor, NOTHING_EATEN, satFatBudget, totals, type Item } from './rules';
 
 const it_ = (food: string, servings = 1): Item => ({ food, servings });
 const kinds = (items: Item[], type: Parameters<typeof evaluate>[1], ctx?: Parameters<typeof evaluate>[3]) =>
@@ -34,7 +34,7 @@ describe('carbs', () => {
   });
 
   it('uses the snack limit for snacks', () => {
-    expect(limitsFor('snack', DEFAULT_RULES)).toEqual({ carbs: 15, sodium: 300, satFat: 2 });
+    expect(limitsFor('snack', DEFAULT_RULES)).toEqual({ carbs: 15, sodium: 300 });
     expect(kinds([it_('apple'), it_('pb')], 'snack').carbs).toBe('fail'); // 18 g
     expect(kinds([it_('apple', 0.5), it_('pb')], 'snack').carbs).toBe('ok');
   });
@@ -68,11 +68,19 @@ describe('sodium and saturated fat', () => {
     expect(kinds([it_('chicken'), it_('lssoy', 4), it_('broccoli', 2)], 'dinner').sodium).toBe('fail');
   });
 
-  it('only warns on saturated fat - her handout says limit, not never', () => {
-    const e = evaluate([it_('pb', 2), it_('wwbread'), it_('broccoli', 2)], 'lunch', DEFAULT_RULES);
-    expect(e.checks.find((c) => c.kind === 'satFat')?.status).toBe('ok');
-    const heavy = evaluate([it_('egg', 2), it_('pb'), it_('wwbread')], 'breakfast', DEFAULT_RULES);
-    expect(heavy.checks.find((c) => c.kind === 'satFat')?.status).toBe('warn');
+  it('turns her 5% of calories into a daily gram budget', () => {
+    expect(satFatBudget(DEFAULT_RULES)).toBe(8.9); // 5% of 1,600 kcal at 9 kcal/g
+    expect(satFatBudget({ ...DEFAULT_RULES, calorieDay: 1800 })).toBe(10);
+  });
+
+  it("counts saturated fat against the day's budget, not per meal", () => {
+    const meal = [it_('egg'), it_('pb'), it_('wwbread')]; // 3.1 g
+    const morning = evaluate(meal, 'breakfast', DEFAULT_RULES);
+    expect(morning.checks.find((c) => c.kind === 'satFat')).toMatchObject({ status: 'ok', text: 'Sat. fat 3.1 of 8.9 g today' });
+    const later = evaluate(meal, 'lunch', DEFAULT_RULES, { ...NOTHING_EATEN, satFatToday: 6 });
+    expect(later.checks.find((c) => c.kind === 'satFat')?.status).toBe('fail');
+    // Fine to save - it fits again tomorrow.
+    expect(later.fitsAnyDay).toBe(true);
   });
 });
 
@@ -92,16 +100,16 @@ describe('the plate', () => {
 
 describe('what she already ate', () => {
   it('counts egg yolks over the week', () => {
-    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 0, yolksThisWeek: 2 }).yolks).toBe('ok');
-    const over = evaluate([it_('egg')], 'breakfast', DEFAULT_RULES, { cholesterolToday: 0, yolksThisWeek: 3 });
+    expect(kinds([it_('egg')], 'breakfast', { ...NOTHING_EATEN, yolksThisWeek: 2 }).yolks).toBe('ok');
+    const over = evaluate([it_('egg')], 'breakfast', DEFAULT_RULES, { ...NOTHING_EATEN, yolksThisWeek: 3 });
     expect(over.fits).toBe(false);
     // Fine to keep - it fits again once the week moves on.
     expect(over.fitsAnyDay).toBe(true);
   });
 
   it("counts cholesterol against today's total", () => {
-    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 9, yolksThisWeek: 0 }).cholesterol).toBe('ok'); // 195
-    expect(kinds([it_('egg')], 'breakfast', { cholesterolToday: 20, yolksThisWeek: 0 }).cholesterol).toBe('fail'); // 206
+    expect(kinds([it_('egg')], 'breakfast', { ...NOTHING_EATEN, cholesterolToday: 9 }).cholesterol).toBe('ok'); // 195
+    expect(kinds([it_('egg')], 'breakfast', { ...NOTHING_EATEN, cholesterolToday: 20 }).cholesterol).toBe('fail'); // 206
   });
 });
 

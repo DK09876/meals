@@ -7,8 +7,10 @@ meal, every carb paired with a protein or fat, low sodium, cholesterol under
 tailnet, as a home-screen app on the family's iPhones.
 
 **These are guidelines from her care team's handouts, not medical advice.**
-The snack, sodium and saturated-fat limits are guesses until her dietitian
-confirms them; the app labels them so.
+Saturated fat follows her handout: no more than 5% of the day's calories,
+counted across the day like cholesterol. The snack carb limit, sodium per meal
+and her daily calorie target (which turns that 5% into grams) are guesses
+until her dietitian confirms them; the app labels them so.
 
 ## What it does
 

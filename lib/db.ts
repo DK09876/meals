@@ -28,7 +28,7 @@ import { Database } from 'node-sqlite3-wasm';
 
 import { catalogMeal, type Meal } from './catalog';
 import type { LogEntry } from './history';
-import { DEFAULT_RULES, type Item, type MealType, type Rules } from './rules';
+import { DEFAULT_RULES, RULE_KEYS, type Item, type MealType, type Rules } from './rules';
 
 const DB_PATH = process.env.MEALS_DB_PATH || `${process.cwd()}/data/meals.db`;
 
@@ -133,8 +133,13 @@ export interface RulesRecord {
 
 export function getRules(profileId: string): RulesRecord {
   const row = open().get('SELECT rules, rulesUpdatedAt FROM profiles WHERE id = ?', [profileId]) as { rules: string; rulesUpdatedAt: string };
-  // Rules added after a profile was made take their defaults.
-  return { rules: { ...DEFAULT_RULES, ...JSON.parse(row.rules) }, updatedAt: row.rulesUpdatedAt };
+  // Rules added after a profile was made take their defaults; retired ones
+  // (the per-meal saturated fat limit, replaced 2026-10-27 by her handout's
+  // 5% of calories) are dropped.
+  const stored = JSON.parse(row.rules) as Record<string, number>;
+  const rules = { ...DEFAULT_RULES };
+  for (const key of RULE_KEYS) if (typeof stored[key] === 'number') rules[key] = stored[key];
+  return { rules, updatedAt: row.rulesUpdatedAt };
 }
 
 export type PatchResult = { ok: true; record: RulesRecord } | { ok: false; record: RulesRecord };
