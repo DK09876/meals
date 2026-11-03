@@ -126,21 +126,49 @@ Answer with JSON: "reply" is your short message. "recipes" holds 0 to 3 recipes 
 
 const roundQuarter = (n: number) => Math.round(n * 4) / 4;
 
+const norm = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+const singular = (s: string) => s.replace(/(ies)$/, 'y').replace(/(oes|ses|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, '');
+
+/** Food ids by every way a model might write them: the id, the name, the name before its comma. */
+const ALIASES: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const f of Object.values(FOODS)) {
+    for (const key of [f.id, norm(f.name), norm(f.name.split(',')[0]), ...(f.name.match(/\(([^)]+)\)/)?.[1].split(/,| or /) ?? []).map(norm)]) {
+      if (key && !m.has(key)) m.set(key, f.id);
+      if (key && !m.has(singular(key))) m.set(singular(key), f.id);
+    }
+  }
+  return m;
+})();
+
+/** The food a model meant: its id, or a name we can be sure of. Unknown stays unknown - no guessing at numbers. */
+export function resolveFood(raw: string): string | null {
+  if (FOODS[raw]) return raw;
+  const n = norm(raw);
+  return ALIASES.get(n) ?? ALIASES.get(singular(n)) ?? ALIASES.get(n.replace(/ /g, '')) ?? null;
+}
+
 /** One recipe from the model, made safe: known foods, sensible servings, amounts in the table's words. */
-function clean(raw: unknown): Omit<DraftRecipe, 'note'> | null {
+function clean(raw: unknown): { recipe: Omit<DraftRecipe, 'note'> } | { problem: string } {
   const r = raw as { name?: unknown; type?: unknown; minutes?: unknown; items?: unknown; steps?: unknown };
-  if (typeof r?.name !== 'string' || !r.name.trim() || !isMealType(r.type) || !Array.isArray(r.items) || !r.items.length) return null;
+  if (typeof r?.name !== 'string' || !r.name.trim()) return { problem: 'no name' };
+  const type = typeof r.type === 'string' ? r.type.toLowerCase() : r.type;
+  if (!isMealType(type)) return { problem: `meal type ${JSON.stringify(r.type)}` };
+  if (!Array.isArray(r.items) || !r.items.length) return { problem: 'no items' };
   const items: Item[] = [];
   for (const it of r.items as Array<{ food?: unknown; servings?: unknown }>) {
-    if (typeof it?.food !== 'string' || !FOODS[it.food] || typeof it.servings !== 'number') return null;
-    const servings = roundQuarter(Math.min(6, Math.max(0.25, it.servings)));
-    const existing = items.find((x) => x.food === it.food);
+    const food = typeof it?.food === 'string' ? resolveFood(it.food) : null;
+    const amount = typeof it?.servings === 'string' ? Number(it.servings) : it?.servings;
+    if (!food) return { problem: `unknown food ${JSON.stringify(it?.food)}` };
+    if (typeof amount !== 'number' || !Number.isFinite(amount)) return { problem: `servings ${JSON.stringify(it?.servings)}` };
+    const servings = roundQuarter(Math.min(6, Math.max(0.25, amount)));
+    const existing = items.find((x) => x.food === food);
     if (existing) existing.servings += servings;
-    else items.push({ food: it.food, servings });
+    else items.push({ food, servings });
   }
   const steps = Array.isArray(r.steps) ? r.steps.filter((s): s is string => typeof s === 'string' && !!s.trim()).map((s) => s.trim().slice(0, 300)).slice(0, 8) : [];
   const minutes = typeof r.minutes === 'number' && r.minutes > 0 && r.minutes < 300 ? Math.round(r.minutes) : null;
-  return { name: r.name.trim().slice(0, 60), type: r.type, minutes, items: items.map(withLabel), steps };
+  return { recipe: { name: r.name.trim().slice(0, 60), type, minutes, items: items.map(withLabel), steps } };
 }
 
 export const withLabel = (item: Item): Item => {
@@ -153,19 +181,24 @@ export function vet(recipes: unknown[], rules: Rules): { kept: DraftRecipe[]; dr
   const kept: DraftRecipe[] = [];
   const dropped: string[] = [];
   for (const raw of recipes.slice(0, 3)) {
-    const r = clean(raw);
-    if (!r) {
+    const cleaned = clean(raw);
+    if ('problem' in cleaned) {
       const name = (raw as { name?: unknown })?.name;
+      console.error(`chat: left out ${JSON.stringify(name)}: ${cleaned.problem}`);
       if (typeof name === 'string') dropped.push(name);
       continue;
     }
+    const r = cleaned.recipe;
     if (evaluate(r.items, r.type, rules, NOTHING_EATEN).fitsAnyDay) {
       kept.push(r);
       continue;
     }
     const [fix] = makeItFit(r.items, r.type, rules, NOTHING_EATEN, 1);
     if (fix) kept.push({ ...r, items: fix.items.map(withLabel), note: `Changed to fit the plan: ${fix.text.charAt(0).toLowerCase()}${fix.text.slice(1)}.` });
-    else dropped.push(r.name);
+    else {
+      console.error(`chat: left out ${JSON.stringify(r.name)}: ${evaluate(r.items, r.type, rules, NOTHING_EATEN).verdict.text}`);
+      dropped.push(r.name);
+    }
   }
   return { kept, dropped };
 }

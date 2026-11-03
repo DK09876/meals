@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ask, ChatUnavailable, configuredModels, systemPrompt, vet, type Model, type PromptContext } from './chat';
+import { ask, ChatUnavailable, configuredModels, resolveFood, systemPrompt, vet, type Model, type PromptContext } from './chat';
 import { DEFAULT_RULES, evaluate } from './rules';
 
 const ctx: PromptContext = { rules: DEFAULT_RULES, pantry: ['okra'], favourites: ['Lentil & spinach soup'], notForMe: [], grandma: true };
@@ -44,6 +44,22 @@ describe('vet', () => {
   it('rounds odd servings to quarters and merges repeats', () => {
     const { kept } = vet([{ ...dal, items: [{ food: 'okra', servings: 0.3 }, { food: 'okra', servings: 1 }, { food: 'tofu', servings: 1 }] }], DEFAULT_RULES);
     expect(kept[0].items[0]).toMatchObject({ food: 'okra', servings: 1.25 });
+  });
+});
+
+describe('resolveFood', () => {
+  it('takes ids, and names a model is likely to write instead', () => {
+    expect(['oats', 'Oatmeal', 'oatmeal', 'Blueberries', 'blueberry', 'Almonds', 'moong dal', 'Bhindi', 'Greek yogurt', 'chicken breast', 'roti', 'chapati'].map(resolveFood))
+      .toEqual(['oats', 'oats', 'oats', 'blueberries', 'blueberries', 'almonds', 'mungbeans', 'okra', 'greekyog', 'chicken', 'roti', 'roti']);
+  });
+
+  it('leaves what it cannot be sure of unknown', () => {
+    expect(['paneer', 'bacon', 'butter', ''].map(resolveFood)).toEqual([null, null, null, null]);
+  });
+
+  it('keeps a recipe the model wrote with names and capitals', () => {
+    const { kept } = vet([{ name: 'Warm oatmeal', type: 'Breakfast', minutes: 10, items: [{ food: 'Oatmeal', servings: 1 }, { food: 'blueberries', servings: '1' }, { food: 'Almonds', servings: 1 }], steps: [] }], DEFAULT_RULES);
+    expect(kept.map((r) => [r.type, r.items.map((i) => i.food)])).toEqual([['breakfast', ['oats', 'blueberries', 'almonds']]]);
   });
 });
 
