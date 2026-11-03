@@ -88,6 +88,21 @@ function open(): Database {
   db.run(`CREATE TABLE IF NOT EXISTS photos (mealId TEXT PRIMARY KEY, file TEXT NOT NULL, mime TEXT NOT NULL, credit TEXT NOT NULL DEFAULT '', license TEXT NOT NULL DEFAULT '', page TEXT NOT NULL DEFAULT '', updatedAt TEXT NOT NULL)`);
   db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
   db.run(`CREATE TABLE IF NOT EXISTS admin_sessions (tokenHash TEXT PRIMARY KEY, createdAt TEXT NOT NULL, expiresAt TEXT NOT NULL)`);
+  // The testing phase (2026-11-02): what people say about the app, with where they were.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      profileId TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      path TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT '',
+      device TEXT NOT NULL DEFAULT '',
+      build TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL,
+      doneAt TEXT
+    )
+  `);
   return db;
 }
 
@@ -332,3 +347,38 @@ export const deleteAllSessions = () => open().run('DELETE FROM admin_sessions');
 
 /** The database file's folder - photos live beside it, so one folder is the whole backup. */
 export const DATA_DIR = dirname(DB_PATH);
+
+// --- feedback (the testing phase) -------------------------------------------
+
+export type FeedbackKind = 'good' | 'confusing' | 'wrong' | 'idea';
+export const FEEDBACK_KINDS: FeedbackKind[] = ['good', 'confusing', 'wrong', 'idea'];
+
+export interface Feedback {
+  id: string;
+  profileId: string;
+  kind: FeedbackKind;
+  text: string;
+  path: string;
+  mode: string;
+  device: string;
+  build: string;
+  createdAt: string;
+  doneAt: string | null;
+}
+
+export function addFeedback(f: Omit<Feedback, 'id' | 'createdAt' | 'doneAt'>): Feedback {
+  const row: Feedback = { ...f, id: randomUUID(), createdAt: now(), doneAt: null };
+  open().run('INSERT INTO feedback (id, profileId, kind, text, path, mode, device, build, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [row.id, row.profileId, row.kind, row.text, row.path, row.mode, row.device, row.build, row.createdAt]);
+  return row;
+}
+
+export const listFeedback = (limit = 200) =>
+  open().all('SELECT * FROM feedback ORDER BY createdAt DESC LIMIT ?', [limit]) as unknown as Feedback[];
+
+export const feedbackToday = (profileId: string) =>
+  (open().get('SELECT count(*) AS c FROM feedback WHERE profileId = ? AND createdAt >= ?', [profileId, new Date(Date.now() - 86_400_000).toISOString()]) as { c: number }).c;
+
+export function setFeedbackDone(id: string, done: boolean): boolean {
+  return open().run('UPDATE feedback SET doneAt = ? WHERE id = ?', [done ? now() : null, id]).changes > 0;
+}

@@ -53,3 +53,8 @@ guess supply nutrition values.
   in the 7-day window, another day, another meal. Each option is applied to a
   copy of the plan and kept only if everything else still fits. What she
   actually ate counts over what was planned (`dayItems` in lib/plan.ts).
+- Testing phase (`lib/testing.ts`): on by default; a one-line "Test version"
+  strip opens a feedback sheet (four big choices + optional typed/spoken
+  note, with the screen path). Admin Settings → Testing phase reads feedback
+  and turns it off. Read it on the Pi with
+  `sqlite3 data/meals.db "SELECT createdAt, kind, path, text FROM feedback ORDER BY createdAt DESC"`.

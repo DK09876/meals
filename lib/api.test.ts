@@ -40,6 +40,7 @@ const routes = async () => ({
   photoSearch: await import('@/app/api/photos/search/route'),
   settings: await import('@/app/api/settings/route'),
   chat: await import('@/app/api/chat/route'),
+  feedback: await import('@/app/api/feedback/route'),
   dictate: await import('@/app/api/dictate/route'),
 });
 
@@ -349,6 +350,32 @@ describe('a copy borrowing the Pi (MEALS_UPSTREAM)', () => {
     const res = await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [{ role: 'user', content: 'okra' }] }, false));
     expect(res.status).toBe(503);
     expect((await res.json()).error).toMatch(/Tailscale/);
+  });
+});
+
+describe('testing phase and feedback', () => {
+  it('starts on with a note, and admins can change both', async () => {
+    const r = await setup();
+    expect((await state(r)).testing).toEqual({ on: true, note: 'the week planner, recipe photos, asking for ideas by voice, and the grocery list' });
+    expect((await r.settings.PUT(req('settings', 'PUT', { testing: false }, false))).status).toBe(403);
+    await r.settings.PUT(req('settings', 'PUT', { testingNote: 'the new grocery list' }));
+    await r.settings.PUT(req('settings', 'PUT', { testing: false }));
+    expect((await state(r)).testing).toEqual({ on: false, note: 'the new grocery list' });
+  });
+
+  it('takes feedback from anyone, with where they were; only admins read it', async () => {
+    const r = await setup();
+    const sent = await r.feedback.POST(new Request(`http://test/api/feedback?${P}`, {
+      method: 'POST', body: JSON.stringify({ kind: 'confusing', text: 'The plus button is small', path: '/recipes', mode: 'grandma' }),
+      headers: { 'content-type': 'application/json', 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit Version/18.0 Mobile Safari/604.1' },
+    }));
+    expect(sent.status).toBe(200);
+    expect((await r.feedback.POST(req(`feedback?${P}`, 'POST', { kind: 'meh' }, false))).status).toBe(400);
+    expect((await r.feedback.GET(req('feedback', 'GET', undefined, false))).status).toBe(403);
+    const { feedback } = await (await r.feedback.GET(req('feedback'))).json();
+    expect(feedback[0]).toMatchObject({ profileId: 'grandma', kind: 'confusing', text: 'The plus button is small', path: '/recipes', mode: 'grandma', device: 'iPhone, Safari', doneAt: null });
+    await r.feedback.PATCH(req('feedback', 'PATCH', { id: feedback[0].id, done: true }));
+    expect((await (await r.feedback.GET(req('feedback'))).json()).feedback[0].doneAt).not.toBeNull();
   });
 });
 
