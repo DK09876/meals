@@ -30,9 +30,9 @@ export default function ProfileSwitcher() {
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="-ml-1 flex min-h-11 items-center gap-2.5 rounded-xl px-1 text-left" aria-haspopup="dialog">
+      <button onClick={() => setOpen(true)} className="-ml-1 flex min-h-11 min-w-0 items-center gap-2.5 rounded-xl px-1 text-left" aria-haspopup="dialog">
         {name && <Avatar name={name} />}
-        <span className="text-[15px] font-bold">Cooking for {name || '…'}</span>
+        <span className="truncate text-[15px] font-bold">For {name || '…'}</span>
         <Icon name="down" size={18} className="text-muted" />
       </button>
       {open && (
