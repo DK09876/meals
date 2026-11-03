@@ -24,6 +24,7 @@ export interface AppState {
   admin: boolean;
   adminConfigured: boolean;
   store: string;
+  testing: { on: boolean; note: string };
 }
 
 const url = (path: string) => {
@@ -90,6 +91,12 @@ export async function dictate(audio: Blob): Promise<string> {
   form.append('audio', audio, audio.type.includes('webm') ? 'speech.webm' : 'speech.m4a');
   return fetch(url('dictate'), { method: 'POST', body: form }).then(json<{ text: string }>).then((b) => b.text);
 }
+export type FeedbackKind = 'good' | 'confusing' | 'wrong' | 'idea';
+export interface FeedbackItem { id: string; profileId: string; kind: FeedbackKind; text: string; path: string; mode: string; device: string; build: string; createdAt: string; doneAt: string | null }
+export const sendFeedback = (kind: FeedbackKind, text: string, path: string, mode: string) => send<{ id: string }>('feedback', 'POST', { kind, text, path, mode });
+export const listFeedback = () => fetch(url('feedback'), { cache: 'no-store' }).then(json<{ feedback: FeedbackItem[] }>).then((b) => b.feedback);
+export const markFeedback = (id: string, done: boolean) => send<{ ok: true }>('feedback', 'PATCH', { id, done });
+export const setTesting = (change: { testing?: boolean; testingNote?: string }) => send<{ ok: true }>('settings', 'PUT', change);
 export const setStore = (store: string) => send<{ ok: true; store: string }>('settings', 'PUT', { store });
 export const photoUrl = (mealId: string, info?: PhotoInfo) => (info ? `/api/photos/${encodeURIComponent(mealId)}?v=${encodeURIComponent(info.v)}` : null);
 export const setPantry = (foodId: string, on: boolean) => send<{ ok: true }>('pantry', 'PUT', { foodId, on });

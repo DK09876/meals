@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import DataProvider, { useData } from './DataProvider';
+import { TestingBanner } from './Feedback';
 import ProfileGate from './ProfileGate';
 import ProfileSwitcher from './ProfileSwitcher';
 import { ToastProvider } from './Toast';
@@ -53,7 +54,8 @@ function ForProfile({ children }: { children: React.ReactNode }) {
     <DataProvider key={profile}>
       <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
         <Header />
-        <main className="safe-x flex flex-1 flex-col gap-4 pb-[calc(100px+env(safe-area-inset-bottom))] pt-1">
+        <TestingBanner />
+        <main className="safe-x flex flex-1 flex-col gap-4 pb-[calc(100px+env(safe-area-inset-bottom))] pt-3">
           <Body>{children}</Body>
         </main>
       </div>

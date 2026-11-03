@@ -15,6 +15,7 @@ import { addDays, dayKey } from '@/lib/dates';
 import { getRules, getSetting, listCustomMeals, listLikes, listLog, listPantry, listPhotos, listPlan, listProfiles } from '@/lib/db';
 import { ensurePhotos } from '@/lib/auto-photos';
 import { requireProfile } from '@/lib/profile-route';
+import { testingState } from '@/lib/testing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
       admin: isAdmin(request),
       adminConfigured: passwordSet(),
       store: getSetting('instacart.store') ?? '',
+      testing: testingState(),
       pantry: listPantry(who.profile),
       custom: listCustomMeals(who.profile),
       log: listLog(who.profile),
