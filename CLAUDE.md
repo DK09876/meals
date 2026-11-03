@@ -37,3 +37,14 @@ guess supply nutrition values.
 - "Make it fit" (`lib/swaps.ts`) is deterministic and re-checks every fix.
 - Photos come from Wikimedia Commons (`lib/photos.ts`) or uploads, stored
   beside the database (never in the repo). Tests stub `fetch`.
+
+## Groceries, chat and voice (2026-11-02)
+- Groceries (`lib/grocery.ts`) add up the plan minus eaten slots; "Got it"
+  sets the at-home list. Instacart links are plain store searches - no API.
+- Chat (`lib/chat.ts`): models only propose food-table ids and servings;
+  `vet()` re-labels amounts from the table, fixes with `makeItFit` or drops.
+  Free models only (Groq, then Gemini), one try each, 25 s. Tests use a fake
+  `Model` or stub `fetch`; MEALS_GROQ_URL / MEALS_WHISPER_URL point local
+  end-to-end checks at stand-ins.
+- More foods come from `scripts/usda-foods.mjs` (USDA SR Legacy) into
+  `lib/foods-usda.json`; edit the ROWS there and re-run, never hand-edit JSON.

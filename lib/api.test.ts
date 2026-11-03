@@ -39,6 +39,8 @@ const routes = async () => ({
   photo: await import('@/app/api/photos/[id]/route'),
   photoSearch: await import('@/app/api/photos/search/route'),
   settings: await import('@/app/api/settings/route'),
+  chat: await import('@/app/api/chat/route'),
+  dictate: await import('@/app/api/dictate/route'),
 });
 
 let cookie = '';
@@ -282,6 +284,45 @@ describe('store setting', () => {
     expect((await state(r)).store).toBe('costco');
     await r.settings.PUT(req('settings', 'PUT', { store: '' }));
     expect((await state(r)).store).toBe('');
+  });
+});
+
+describe('chat and dictation', () => {
+  it('answers with checked recipes from a stubbed free model', async () => {
+    vi.stubEnv('GROQ_API_KEY', 'test');
+    const r = await setup();
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ choices: [{ message: { content: JSON.stringify({ reply: 'Try this.', recipes: [{ name: 'Okra dal', type: 'lunch', minutes: 25, items: [{ food: 'mungbeans', servings: 1 }, { food: 'okra', servings: 2 }, { food: 'oliveoil', servings: 1 }], steps: ['Cook.'] }] }) } }] })));
+    const res = await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [{ role: 'user', content: 'okra please' }] }, false));
+    const body = await res.json();
+    expect(body).toMatchObject({ reply: 'Try this.', model: 'openai/gpt-oss-120b' });
+    expect(body.recipes[0].items[1].label).toBe('1 cup cooked okra (bhindi)');
+  });
+
+  it('says so when no model is set up, and refuses empty questions', async () => {
+    const r = await setup();
+    expect((await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [{ role: 'user', content: 'hi' }] }, false))).status).toBe(503);
+    expect((await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [] }, false))).status).toBe(400);
+  });
+
+  it('passes a recording to whisper and tidies the text', async () => {
+    const r = await setup();
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { seen.push(String(url)); return Response.json({ text: ' Something with okra. [BLANK_AUDIO] ' }); }));
+    const form = new FormData();
+    form.append('audio', new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/mp4' }), 'speech.m4a');
+    const res = await r.dictate.POST(new Request(`http://test/api/dictate?${P}`, { method: 'POST', body: form }));
+    expect(await res.json()).toEqual({ text: 'Something with okra.' });
+    expect(seen[0]).toBe('http://127.0.0.1:8792/inference');
+  });
+
+  it('says to use the keyboard microphone when whisper is down', async () => {
+    const r = await setup();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+    const form = new FormData();
+    form.append('audio', new Blob([new Uint8Array([1])]), 'speech.m4a');
+    const res = await r.dictate.POST(new Request(`http://test/api/dictate?${P}`, { method: 'POST', body: form }));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/keyboard/);
   });
 });
 

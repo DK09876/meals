@@ -83,6 +83,13 @@ export async function uploadPhoto(mealId: string, file: File) {
   form.append('file', file);
   return fetch(url(`photos/${encodeURIComponent(mealId)}`), { method: 'POST', body: form }).then(json<{ ok: true }>);
 }
+export interface ChatReply { reply: string; recipes: Array<Omit<Meal, 'id'> & { note?: string }>; dropped: string[]; model: string }
+export const askChat = (messages: Array<{ role: 'user' | 'assistant'; content: string }>, grandma: boolean) => send<ChatReply>('chat', 'POST', { messages, grandma });
+export async function dictate(audio: Blob): Promise<string> {
+  const form = new FormData();
+  form.append('audio', audio, audio.type.includes('webm') ? 'speech.webm' : 'speech.m4a');
+  return fetch(url('dictate'), { method: 'POST', body: form }).then(json<{ text: string }>).then((b) => b.text);
+}
 export const setStore = (store: string) => send<{ ok: true; store: string }>('settings', 'PUT', { store });
 export const photoUrl = (mealId: string, info?: PhotoInfo) => (info ? `/api/photos/${encodeURIComponent(mealId)}?v=${encodeURIComponent(info.v)}` : null);
 export const setPantry = (foodId: string, on: boolean) => send<{ ok: true }>('pantry', 'PUT', { foodId, on });

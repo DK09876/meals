@@ -1,0 +1,17 @@
+[Unit]
+Description=whisper.cpp speech-to-text for Meals (127.0.0.1:8792)
+After=network-online.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/whisper.cpp
+# --convert: the iPhone records AAC; ffmpeg turns it into the WAV whisper wants.
+# Nice: transcribing takes all four cores for a few seconds; the apps come first.
+ExecStart=/home/admin/whisper.cpp/build/bin/whisper-server -m models/ggml-base.en.bin --host 127.0.0.1 --port 8792 --convert -t 4 -l en
+Nice=10
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

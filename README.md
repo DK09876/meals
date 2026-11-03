@@ -14,26 +14,31 @@ until her dietitian confirms them; the app labels them so.
 
 ## What it does
 
-- **Ideas** - one meal at a time for breakfast, lunch, dinner or a snack,
-  showing carbs against her limit, her handout's plate (half veggies, a quarter
-  grains, a quarter protein) and every check. Only meals that fit right now are
-  offered - including today's cholesterol and this week's egg yolks. "Use
-  what's at home" puts meals needing the fewest groceries first.
-- **She ate this** - logs a meal (with Undo), which feeds those day and week checks.
-- **Build a plate** - add foods group by group and watch the checks; a meal
-  can only be saved once it fits.
-- **At home** - a checklist of what is in the kitchen.
-- **Saved & history** - bookmarked meals, and what she ate by day.
-- **Her plan** - the limits, where each came from, and steppers to change
-  them. Two phones changing them at once cannot overwrite each other: a change
-  made from a stale copy is refused (409) and the phone shows what is set.
+**Grandma's view** (the default, big type, three tabs):
 
-Every number is added up from a fixed food table (`lib/foods.ts`, USDA values
-in her handouts' serving sizes); nothing comes from a model. Each built-in meal
-is tested against her plan (`lib/catalog.test.ts`).
+- **My week** - seven days of breakfast, lunch, dinner and a snack, with
+  photos. *Fill my week* plans every empty slot so each day stays within her
+  cholesterol and saturated fat and any seven days within her egg yolks.
+  *I ate it*, then 👍 (a favourite, suggested more) or 👎 (never suggested again).
+- **Recipes** - a photo grid: *For you* first, favourites, search. A recipe
+  can be read, added to her week (each day marked fits or not, with meals
+  that do fit offered instead) or marked eaten. *Make it fit* offers small
+  swaps - less rice, egg whites for a whole egg - each checked again.
+- **Ask** - ask for ideas in her own words, typed or spoken. Recipes come
+  from a free language model but every number is the app's own: each one is
+  added up from the food table, fixed with the smallest swap or left out if
+  it breaks a limit. Speech is turned into text on the Pi (whisper.cpp).
 
-Later: scan a grocery receipt into the at-home list, use up items when a meal
-is cooked, a weekly plan with a shopping list, and meal-time reminders.
+**Admin** (the family, behind a password checked on the server): her limits,
+the grocery list (this week or next, minus what's at home, each item a link
+that searches Instacart at your store; share or copy the list), the at-home
+list, recipe photos, building plates, and what she ate.
+
+Every number is added up from a fixed food table: `lib/foods.ts` plus
+`lib/foods-usda.json`, built from USDA FoodData Central by
+`scripts/usda-foods.mjs`, in her handouts' serving sizes. Each built-in meal
+is tested against her plan (`lib/catalog.test.ts`). Photos come from
+Wikimedia Commons (credited) or the family, and stay on the Pi.
 
 ## Stack
 
@@ -76,7 +81,7 @@ reach SSH and the other apps. This node is different:
 sudo useradd --system --no-create-home --shell /usr/sbin/nologin ts-meals
 git clone https://github.com/DK09876/meals ~/development/meals && cd ~/development/meals
 npm ci && npx next build
-sudo cp deploy/*.service deploy/*.timer /etc/systemd/system/
+sudo cp deploy/meals*.service deploy/*.timer deploy/tailscaled-meals.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now meals tailscaled-meals meals-backup.timer
 sudo tailscale --socket=/run/tailscale-meals/tailscaled.sock up --hostname=meals
@@ -85,6 +90,20 @@ sudo tailscale --socket=/run/tailscale-meals/tailscaled.sock serve --bg 3003
 
 Check the guard from another tailnet device: `nc -z <meals 100.x> 443` and
 `3003` connect; `22`, `3000`, `3001`, `3002` are refused.
+
+**Ask** needs a free model key in `.env` next to `package.json`
+(`chmod 600`): `GROQ_API_KEY` (tried first, GPT-OSS 120B) and/or
+`GEMINI_API_KEY` (Flash-Lite). Without either, Ask says it is not set up.
+
+**Voice typing** needs whisper.cpp's server on 127.0.0.1:8792:
+
+```
+sudo apt-get install -y cmake ffmpeg
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/whisper.cpp && cd ~/whisper.cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j4 --target whisper-server
+sh ./models/download-ggml-model.sh base.en
+sudo cp ~/development/meals/deploy/whisper.service /etc/systemd/system/ && sudo systemctl enable --now whisper
+```
 
 ### Deploy
 

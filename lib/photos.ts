@@ -110,7 +110,7 @@ export function matchScore(title: string, words: string[]): number {
  * the most words with the dish, needing at least two (or the only one there is).
  * Nothing rather than something unrelated - a missing photo shows the plate drawing.
  */
-export async function findPhoto(name: string, hint: string | undefined, fetcher: Fetch = fetch): Promise<Candidate | null> {
+export async function findPhoto(name: string, hint?: string, fetcher: Fetch = fetch): Promise<Candidate | null> {
   const words = keywords(`${hint ?? ''} ${name}`);
   const need = Math.min(2, words.length);
   let best: { c: Candidate; score: number } | null = null;
