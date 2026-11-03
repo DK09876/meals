@@ -326,6 +326,32 @@ describe('chat and dictation', () => {
   });
 });
 
+describe('a copy borrowing the Pi (MEALS_UPSTREAM)', () => {
+  it('passes recordings and questions on to the Pi', async () => {
+    vi.stubEnv('MEALS_UPSTREAM', 'https://meals.example.ts.net/');
+    const r = await setup();
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      seen.push(String(url));
+      return String(url).includes('/api/dictate') ? Response.json({ text: 'Okra please.' }) : Response.json({ reply: 'From the Pi.', recipes: [], dropped: [], model: 'openai/gpt-oss-120b' });
+    }));
+    const form = new FormData();
+    form.append('audio', new Blob([new Uint8Array([1])]), 'speech.m4a');
+    expect(await (await r.dictate.POST(new Request(`http://test/api/dictate?${P}`, { method: 'POST', body: form }))).json()).toEqual({ text: 'Okra please.' });
+    expect((await (await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [{ role: 'user', content: 'okra' }] }, false))).json()).reply).toBe('From the Pi.');
+    expect(seen).toEqual(['https://meals.example.ts.net/api/dictate?profile=grandma', 'https://meals.example.ts.net/api/chat?profile=grandma']);
+  });
+
+  it('says to check Tailscale when the Pi cannot be reached', async () => {
+    vi.stubEnv('MEALS_UPSTREAM', 'https://meals.example.ts.net');
+    const r = await setup();
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    const res = await r.chat.POST(req(`chat?${P}`, 'POST', { messages: [{ role: 'user', content: 'okra' }] }, false));
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toMatch(/Tailscale/);
+  });
+});
+
 describe('build id', () => {
   it('tells the page which build the server is on', async () => {
     vi.stubEnv('NEXT_PUBLIC_MEALS_BUILD', 'b-123');

@@ -59,6 +59,21 @@ npx tsc --noEmit && npm run lint && npm run build
 `node scripts/profile.cjs list|add|rename` manages profiles - stop the
 service first, since two processes writing the WASM SQLite file is unsafe.
 
+### Try it on a laptop
+
+A throwaway copy with its own database, borrowing the Pi's voice typing and
+recipe chat (the laptop's microphone records; the Pi transcribes; the model
+keys stay on the Pi). Needs Tailscale on.
+
+```
+npm run build
+MEALS_DB_PATH=/tmp/meals-test/meals.db MEALS_UPSTREAM=https://meals.<tailnet>.ts.net npx next start -p 3417
+```
+
+Open http://localhost:3417 (the browser allows the microphone on localhost).
+Recipe photos fill in by themselves within a minute or two of first opening.
+`rm -rf /tmp/meals-test` throws it all away.
+
 ## On the Pi
 
 Lives in `~/development/meals`, as systemd unit `meals` on 127.0.0.1:3003,

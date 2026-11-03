@@ -10,6 +10,7 @@
 import { NextResponse } from 'next/server';
 
 import { bad, requireProfile } from '@/lib/profile-route';
+import { upstreamUrl } from '@/lib/upstream';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,19 @@ export async function POST(request: Request) {
   }
   if (!(audio instanceof File) || !audio.size) return bad('No recording');
   if (audio.size > MAX_BYTES) return bad('That recording is too long');
+
+  // A copy running elsewhere passes the recording on to the Pi (lib/upstream.ts).
+  const upstream = upstreamUrl('dictate');
+  if (upstream) {
+    const form = new FormData();
+    form.append('audio', audio, audio.name || 'speech.m4a');
+    try {
+      const res = await fetch(upstream, { method: 'POST', body: form, signal: AbortSignal.timeout(30_000) });
+      return NextResponse.json(await res.json(), { status: res.status });
+    } catch {
+      return bad('Could not reach the Pi for voice typing. Is Tailscale on?', 503);
+    }
+  }
 
   const form = new FormData();
   form.append('file', audio, audio.name || 'speech.m4a');

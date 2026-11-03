@@ -14,6 +14,7 @@ import { dayKey } from '@/lib/dates';
 import { getRules, getSetting, listCustomMeals, listLikes, listPantry, setSetting } from '@/lib/db';
 import { FOODS } from '@/lib/foods';
 import { bad, readJson, requireProfile } from '@/lib/profile-route';
+import { upstreamUrl } from '@/lib/upstream';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,6 +38,17 @@ export async function POST(request: Request) {
   if (body instanceof NextResponse) return body;
   const messages = cleanMessages(body.messages);
   if (!messages) return bad('Say what you would like');
+
+  // No model keys here, but a Pi to ask: pass the question on (lib/upstream.ts).
+  const upstream = configuredModels().length ? null : upstreamUrl('chat');
+  if (upstream) {
+    try {
+      const res = await fetch(upstream, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages, grandma: body.grandma !== false }), signal: AbortSignal.timeout(60_000) });
+      return NextResponse.json(await res.json(), { status: res.status });
+    } catch {
+      return bad('Could not reach the Pi for recipe ideas. Is Tailscale on?', 503);
+    }
+  }
 
   const key = `chat.count.${dayKey(new Date())}`;
   const used = Number(getSetting(key) ?? 0);
