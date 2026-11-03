@@ -18,6 +18,8 @@ import type { Meal } from '@/lib/catalog';
 import { addDays, dayName, monthDay, weekdayShort, type DayKey } from '@/lib/dates';
 import { useMode } from '@/lib/mode';
 import { checkSlot, eatenFor, planned } from '@/lib/plan';
+import { problems } from '@/lib/resolve';
+import MakeItWork from '@/components/MakeItWork';
 import { ranked } from '@/lib/rank';
 import { MEAL_TYPES, mealTypeLabel, satFatBudget, totals, type MealType } from '@/lib/rules';
 
@@ -55,6 +57,8 @@ export default function WeekPage() {
           <button className="iconbtn" aria-label="Next week" disabled={week >= 3} onClick={() => setWeek(week + 1)}><Icon name="next" size={20} /></button>
         </div>
       </div>
+
+      <HeadsUp start={start} />
 
       <ul className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1" aria-label="Days">
         {days.map((d) => {
@@ -109,7 +113,9 @@ export default function WeekPage() {
                   <span className="text-sm text-muted">{Math.round(totals(meal.items).carbs)} g carbs{meal.minutes ? ` · ${meal.minutes} min` : ''}</span>
                 </span>
               </Link>
-              {eaten ? (
+              {eaten && eaten.mealId !== meal.id ? (
+                <span className="max-w-[40%] shrink-0 rounded-xl bg-field px-2.5 py-1.5 text-right text-sm font-bold text-ink-2">Had {eaten.name} instead</span>
+              ) : eaten ? (
                 <span className="flex shrink-0 items-center gap-1 rounded-full bg-ok-bg px-2.5 py-1.5 text-sm font-bold text-ok-fg"><Icon name="ok" size={16} stroke={2.6} />Eaten</span>
               ) : canEat ? (
                 <button onClick={() => logMeal(meal, () => setLiking(meal))} className="shrink-0 rounded-xl border-[1.5px] border-accent px-3 py-2.5 text-[15px] font-bold text-accent">
@@ -188,5 +194,38 @@ export function SlotPicker({ date, slot, onClose }: { date: DayKey; slot: MealTy
       </ul>
       <Link href={`/recipes?type=${slot}&date=${date}`} className="btn btn-secondary" onClick={onClose}>See all {mealTypeLabel(slot).toLowerCase()} recipes</Link>
     </Sheet>
+  );
+}
+
+/**
+ * Planned meals in this week that no longer fit - because of what she
+ * actually ate, a change elsewhere in the plan, or a change to her limits -
+ * each with ways to make it work.
+ */
+function HeadsUp({ start }: { start: DayKey }) {
+  const { world, meals, taste, today } = useData();
+  const grandma = useMode() === 'grandma';
+  const [open, setOpen] = useState<string | null>(null);
+  const found = useMemo(() => (world ? problems(world, meals, taste, start, 7, today) : []), [world, meals, taste, start, today]);
+  if (!found.length) return null;
+  return (
+    <section className="flex flex-col gap-2.5 rounded-3xl border-2 border-warn-fg/30 bg-warn-bg p-4" aria-labelledby="headsup">
+      <h2 id="headsup" className="flex items-center gap-2 text-lg font-bold text-warn-fg"><Icon name="warn" size={22} stroke={2.6} />Heads up</h2>
+      {found.slice(0, 3).map((p) => {
+        const key = `${p.date}-${p.slot}`;
+        const when = `${dayName(p.date, today)}'s ${mealTypeLabel(p.slot).toLowerCase()}`;
+        return (
+          <div key={key} className="flex flex-col gap-2 rounded-2xl bg-surface p-3">
+            <p className="text-[16px]"><b>{when}</b>, {p.meal.name}, no longer fits{grandma ? '' : ' her plan'}: {p.reason.replace(/^Doesn't fit: /, '').replace(/^Too many carbs: /, 'too many carbs, ')}.</p>
+            {open === key ? (
+              <MakeItWork date={p.date} slot={p.slot} meal={p.meal} fixes={p.fixes} moving onDone={() => setOpen(null)} />
+            ) : (
+              <button className="btn btn-secondary min-h-12" onClick={() => setOpen(key)}>See how to fix it</button>
+            )}
+          </div>
+        );
+      })}
+      {found.length > 3 && <p className="text-sm text-warn-fg">And {found.length - 3} more this week.</p>}
+    </section>
   );
 }

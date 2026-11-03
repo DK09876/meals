@@ -48,3 +48,8 @@ guess supply nutrition values.
   end-to-end checks at stand-ins.
 - More foods come from `scripts/usda-foods.mjs` (USDA SR Legacy) into
   `lib/foods-usda.json`; edit the ROWS there and re-run, never hand-edit JSON.
+- When a meal does not fit (adding it, or a planned one that stopped fitting),
+  `lib/resolve.ts` offers: change the recipe, change another meal that day or
+  in the 7-day window, another day, another meal. Each option is applied to a
+  copy of the plan and kept only if everything else still fits. What she
+  actually ate counts over what was planned (`dayItems` in lib/plan.ts).
