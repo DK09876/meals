@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 
 import { addCustomMeal, customMealCount, getRules } from '@/lib/db';
 import { isFood } from '@/lib/foods';
+import { fetchCommonsImage, findPhoto, storePhoto } from '@/lib/photos';
 import { bad, readJson, requireProfile } from '@/lib/profile-route';
 import { evaluate, isMealType, mealTypeLabel, type Item } from '@/lib/rules';
 
@@ -49,5 +50,8 @@ export async function POST(request: Request) {
   const minutes = typeof body.minutes === 'number' && body.minutes > 0 && body.minutes < 600 ? Math.round(body.minutes) : null;
   const note = typeof body.note === 'string' ? body.note.slice(0, 300) : undefined;
   const source = body.source === 'chat' || body.source === 'fixed' ? body.source : 'built';
-  return NextResponse.json({ meal: addCustomMeal(who.profile, body.type, name, items, { steps, minutes, note, source }) });
+  const meal = addCustomMeal(who.profile, body.type, name, items, { steps, minutes, note, source });
+  // A recipe from chat gets its photo in the background; the page shows the plate drawing until then.
+  if (source === 'chat') void findPhoto(meal.name).then((c) => c && fetchCommonsImage(c.thumb).then((bytes) => storePhoto(meal.id, bytes, c))).catch(() => {});
+  return NextResponse.json({ meal });
 }

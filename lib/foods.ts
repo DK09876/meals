@@ -15,6 +15,8 @@
  * rules in rules.ts only ever add these numbers up.
  */
 
+import usdaFoods from './foods-usda.json';
+
 export type FoodGroup = 'veg' | 'protein' | 'starch' | 'fruit' | 'milk' | 'fat' | 'extra';
 
 export interface Food {
@@ -33,6 +35,8 @@ export interface Food {
   cholesterol: number;
   /** Whole egg yolks in one serving - her handout limits these per week. */
   yolks?: number;
+  /** The USDA FoodData Central id its numbers come from, for foods added from USDA directly. */
+  fdcId?: number;
 }
 
 type Row = Omit<Food, 'id'>;
@@ -106,9 +110,20 @@ const ROWS: Record<string, Row> = {
   lssoy: { name: 'Low-sodium soy sauce', serving: '1 tsp', group: 'extra', carbs: 0.3, protein: 0.3, fat: 0, satFat: 0, sodium: 190, cholesterol: 0 },
 };
 
-export const FOODS: Record<string, Food> = Object.fromEntries(
-  Object.entries(ROWS).map(([id, row]) => [id, { id, ...row }]),
-);
+/**
+ * More foods, generated from USDA's own data by scripts/usda-foods.mjs -
+ * mostly for chat, so it can work with dal, roti, okra, shrimp and the rest.
+ */
+const USDA = usdaFoods as Record<string, Row & { usda?: string }>;
+
+export const FOODS: Record<string, Food> = Object.fromEntries([
+  ...Object.entries(ROWS).map(([id, row]) => [id, { id, ...row }]),
+  ...Object.entries(USDA).filter(([id]) => !(id in ROWS)).map(([id, row]) => {
+    const food: Food & { usda?: string } = { id, ...row };
+    delete food.usda;
+    return [id, food];
+  }),
+]);
 
 export const isFood = (id: unknown): id is string => typeof id === 'string' && Object.hasOwn(FOODS, id);
 
