@@ -93,7 +93,7 @@ describe('the plate', () => {
 
   it('still fits with only a tip', () => {
     const e = evaluate([it_('chicken'), it_('quinoa')], 'dinner', DEFAULT_RULES);
-    expect(e.verdict).toEqual({ status: 'warn', text: 'Fits her plan, with one tip' });
+    expect(e.verdict).toEqual({ status: 'warn', text: 'Fits the plan, with one tip' });
     expect(e.fits).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin';
 import { deleteCustomMeal } from '@/lib/db';
 import { bad, requireProfile } from '@/lib/profile-route';
 
@@ -9,6 +10,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
   const { id } = await params;

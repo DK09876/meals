@@ -11,13 +11,13 @@ import { RULE_KEYS, RULE_SETTINGS, satFatBudget } from '@/lib/rules';
 
 const NEVER = ['Organ meats', 'Fried food', 'Bacon', 'Sausage', 'Deli meats', 'Hot dogs', 'Butter', 'Full-fat cheese', 'Cream', 'Coconut oil', 'Pastries', 'Sugary drinks'];
 
-export default function PlanPage() {
+export default function Limits() {
   const { state, saveRules } = useData();
   if (!state) return null;
   return (
     <>
-      <h1 className="text-[30px] font-bold leading-tight">Her plan</h1>
-      <p className="text-muted">Every idea is checked against these. Change a number and the ideas update on every phone.</p>
+      <h2 className="text-[22px] font-bold">Her limits</h2>
+      <p className="-mt-2 text-muted">Every meal is checked against these. A change shows on every phone.</p>
 
       <section className="card px-4.5 py-1" aria-label="Limits">
         <ul>

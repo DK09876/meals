@@ -4,11 +4,16 @@
 
 import { useState } from 'react';
 
+import AdminGate from '@/components/AdminGate';
 import { useData } from '@/components/DataProvider';
 import { Icon } from '@/components/ui';
 import { foodsIn, GROUPS } from '@/lib/foods';
 
 export default function PantryPage() {
+  return <AdminGate><Pantry /></AdminGate>;
+}
+
+function Pantry() {
   const data = useData();
   const [search, setSearch] = useState('');
   if (!data.state) return null;

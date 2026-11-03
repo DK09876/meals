@@ -24,3 +24,16 @@ guess supply nutrition values.
 - Phone rules: tap targets at least 44 px, inputs 16 px or more, safe-area
   padding, status shown with an icon and words, never colour alone.
 - main is PR-only: branch, `gh pr create`, wait for CI, merge.
+
+## Grandma view and admin (2026-11-02)
+- Grandma's view is the default (`lib/mode.ts`); admin screens wrap in
+  `components/AdminGate.tsx`. Admin-only API routes call `requireAdmin`
+  (`lib/admin.ts`, scrypt hash + HttpOnly session cookie). Never rely on a
+  hidden button alone.
+- The week plan (`lib/plan.ts`) checks a slot against the rest of its day
+  (cholesterol, saturated fat) and every 7-day window (egg yolks). PUT
+  /api/plan refuses a meal that does not fit (422 + alternatives); admins may
+  force it. "Fill my week" runs on the server and only fills empty slots.
+- "Make it fit" (`lib/swaps.ts`) is deterministic and re-checks every fix.
+- Photos come from Wikimedia Commons (`lib/photos.ts`) or uploads, stored
+  beside the database (never in the repo). Tests stub `fetch`.

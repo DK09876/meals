@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin';
 import { setPantry } from '@/lib/db';
 import { isFood } from '@/lib/foods';
 import { bad, readJson, requireProfile } from '@/lib/profile-route';
@@ -10,6 +11,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function PUT(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
   const body = await readJson<{ foodId?: unknown; on?: unknown }>(request);

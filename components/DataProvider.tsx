@@ -19,11 +19,23 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import * as api from '@/lib/api';
 import { reloadIfOutdated } from '@/lib/build';
 import { CATALOG, type Meal } from '@/lib/catalog';
+import { dayKey } from '@/lib/dates';
 import { contextFrom } from '@/lib/history';
+import type { World } from '@/lib/plan';
+import type { Like, Taste } from '@/lib/rank';
 import type { Context, Item, MealType, Rules } from '@/lib/rules';
 import { useToast } from './Toast';
 
 const POLL_MS = 20_000;
+
+type MealExtra = NonNullable<Parameters<typeof api.addMeal>[2]>;
+
+/** What the server said when a meal did not fit a slot. */
+export interface SlotRefusal {
+  error: string;
+  instead: string[];
+  otherDays: string[];
+}
 
 interface Data {
   state: api.AppState | null;
@@ -32,16 +44,23 @@ interface Data {
   meals: Meal[];
   mealById: (id: string) => Meal | undefined;
   context: Context;
+  world: World | null;
+  taste: Taste;
   now: Date;
-  saved: ReadonlySet<string>;
+  today: string;
   pantry: ReadonlySet<string>;
+  likes: ReadonlyMap<string, Like>;
+  photo: (mealId: string) => string | null;
   refresh: () => Promise<void>;
-  setSaved: (mealId: string, on: boolean) => void;
+  setLike: (mealId: string, value: Like | 0) => void;
   setPantry: (foodId: string, on: boolean) => void;
-  logMeal: (meal: Meal) => Promise<void>;
+  logMeal: (meal: Meal, afterLog?: () => void) => Promise<void>;
   saveRules: (changes: Partial<Rules>) => void;
-  addMeal: (type: MealType, items: Item[]) => Promise<Meal | null>;
+  addMeal: (type: MealType, items: Item[], extra?: MealExtra) => Promise<Meal | null>;
   deleteMeal: (id: string) => Promise<void>;
+  /** null when it was placed; the refusal when it did not fit. */
+  setSlot: (date: string, slot: MealType, mealId: string | null, opts?: { force?: boolean; weekStart?: string }) => Promise<SlotRefusal | null>;
+  fillWeek: (start: string) => Promise<void>;
 }
 
 const DataContext = createContext<Data | null>(null);
@@ -94,9 +113,9 @@ export default function DataProvider({ children }: { children: React.ReactNode }
   }, [refresh]);
 
   /** Apply now, send, and put things back if the server refuses. */
-  const optimistic = useCallback(async <T,>(apply: (s: api.AppState) => api.AppState, request: () => Promise<T>, failText?: string): Promise<{ ok: true; value: T } | { ok: false }> => {
+  const optimistic = useCallback(async <T,>(apply: (s: api.AppState) => api.AppState, undo: (s: api.AppState, before: api.AppState) => api.AppState, request: () => Promise<T>, failText?: string): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> => {
     const before = latest.current;
-    if (!before) return { ok: false };
+    if (!before) return { ok: false, error: new Error('Not loaded') };
     const next = apply(before);
     latest.current = next;
     setState(next);
@@ -104,45 +123,60 @@ export default function DataProvider({ children }: { children: React.ReactNode }
     try {
       return { ok: true, value: await request() };
     } catch (e) {
-      setState((s) => s && { ...s, ...restore(before, s, apply) });
-      toast(failText ?? message(e));
-      return { ok: false };
+      setState((s) => s && undo(s, before));
+      if (failText !== '') toast(failText ?? message(e));
+      return { ok: false, error: e };
     } finally {
       writes.current--;
     }
   }, [toast]);
 
-  const setSaved = useCallback((mealId: string, on: boolean) => {
+  const setLike = useCallback((mealId: string, value: Like | 0) => {
+    const put = (likes: Record<string, Like>, v: Like | 0 | undefined) => {
+      const out = { ...likes };
+      if (v === 0 || v === undefined) delete out[mealId];
+      else out[mealId] = v;
+      return out;
+    };
     optimistic(
-      (s) => ({ ...s, saved: on ? [...new Set([...s.saved, mealId])] : s.saved.filter((id) => id !== mealId) }),
-      () => api.setSaved(mealId, on),
-    ).then((r) => r.ok && toast(on ? 'Saved' : 'Removed from saved'));
-  }, [optimistic, toast]);
+      (s) => ({ ...s, likes: put(s.likes, value) }),
+      (s, before) => ({ ...s, likes: put(s.likes, before.likes[mealId]) }),
+      () => api.setLike(mealId, value),
+    );
+  }, [optimistic]);
 
   const setPantry = useCallback((foodId: string, on: boolean) => {
+    const put = (list: string[], v: boolean) => (v ? [...new Set([...list, foodId])] : list.filter((id) => id !== foodId));
     optimistic(
-      (s) => ({ ...s, pantry: on ? [...new Set([...s.pantry, foodId])] : s.pantry.filter((id) => id !== foodId) }),
+      (s) => ({ ...s, pantry: put(s.pantry, on) }),
+      (s, before) => ({ ...s, pantry: put(s.pantry, before.pantry.includes(foodId)) }),
       () => api.setPantry(foodId, on),
     );
   }, [optimistic]);
 
-  const logMeal = useCallback(async (meal: Meal) => {
+  const logMeal = useCallback(async (meal: Meal, afterLog?: () => void) => {
     const temp = { id: `pending-${Date.now()}`, mealId: meal.id, name: meal.name, type: meal.type, items: meal.items, eatenAt: new Date().toISOString() };
     const result = await optimistic(
       (s) => ({ ...s, log: [temp, ...s.log] }),
+      (s) => ({ ...s, log: s.log.filter((e) => e.id !== temp.id) }),
       () => api.logMeal(meal.id),
-      'Could not log that. Try again.',
+      'Could not save that. Try again.',
     );
     if (!result.ok) return;
     const entry = result.value;
     setState((s) => s && { ...s, log: s.log.map((e) => (e.id === temp.id ? entry : e)) });
     setNow(new Date());
-    toast(`Logged ${meal.type === 'snack' ? 'a snack' : meal.type}.`, {
+    toast(`Saved: ${meal.name}.`, {
       label: 'Undo',
       run: () => {
-        optimistic((s) => ({ ...s, log: s.log.filter((e) => e.id !== entry.id) }), () => api.unlog(entry.id));
+        optimistic(
+          (s) => ({ ...s, log: s.log.filter((e) => e.id !== entry.id) }),
+          (s) => ({ ...s, log: [entry, ...s.log] }),
+          () => api.unlog(entry.id),
+        );
       },
     });
+    afterLog?.();
   }, [optimistic, toast]);
 
   const saveRules = useCallback((changes: Partial<Rules>) => {
@@ -165,12 +199,11 @@ export default function DataProvider({ children }: { children: React.ReactNode }
       .finally(() => { writes.current--; });
   }, [toast]);
 
-  const addMeal = useCallback(async (type: MealType, items: Item[]) => {
+  const addMeal = useCallback(async (type: MealType, items: Item[], extra: MealExtra = {}) => {
     writes.current++;
     try {
-      const meal = await api.addMeal(type, items);
-      await api.setSaved(meal.id, true);
-      setState((s) => s && { ...s, custom: [...s.custom, meal], saved: [...s.saved, meal.id] });
+      const meal = await api.addMeal(type, items, extra);
+      setState((s) => s && { ...s, custom: [...s.custom, meal] });
       return meal;
     } catch (e) {
       toast(message(e));
@@ -182,52 +215,67 @@ export default function DataProvider({ children }: { children: React.ReactNode }
 
   const deleteMeal = useCallback(async (id: string) => {
     await optimistic(
-      (s) => ({ ...s, custom: s.custom.filter((m) => m.id !== id), saved: s.saved.filter((x) => x !== id) }),
+      (s) => ({ ...s, custom: s.custom.filter((m) => m.id !== id), plan: s.plan.filter((p) => p.mealId !== id) }),
+      (s, before) => ({ ...s, custom: before.custom, plan: before.plan }),
       () => api.deleteMeal(id),
     );
   }, [optimistic]);
 
+  const setSlot = useCallback(async (date: string, slot: MealType, mealId: string | null, opts: { force?: boolean; weekStart?: string } = {}) => {
+    const put = (plan: api.AppState['plan'], id: string | null | undefined) => {
+      const rest = plan.filter((p) => !(p.date === date && p.slot === slot));
+      return id ? [...rest, { date, slot, mealId: id }] : rest;
+    };
+    const result = await optimistic(
+      (s) => ({ ...s, plan: put(s.plan, mealId) }),
+      (s, before) => ({ ...s, plan: put(s.plan, before.plan.find((p) => p.date === date && p.slot === slot)?.mealId) }),
+      () => api.setSlot(date, slot, mealId, opts),
+      '',
+    );
+    if (result.ok) return null;
+    const e = result.error;
+    if (e instanceof api.ApiError && e.status === 422) {
+      const body = e.body as { error: string; instead?: string[]; otherDays?: string[] };
+      return { error: body.error, instead: body.instead ?? [], otherDays: body.otherDays ?? [] };
+    }
+    toast(message(e));
+    return { error: message(e), instead: [], otherDays: [] };
+  }, [optimistic, toast]);
+
+  const fillWeek = useCallback(async (start: string) => {
+    writes.current++;
+    try {
+      const added = await api.fillWeek(start);
+      toast(added ? `Added ${added} ${added === 1 ? 'meal' : 'meals'}. Tap any to swap it.` : 'Every meal of the week is already planned.');
+    } catch (e) {
+      toast(message(e));
+    } finally {
+      writes.current--;
+    }
+    await refresh();
+  }, [refresh, toast]);
+
   const value = useMemo<Data>(() => {
     const meals = [...CATALOG, ...(state?.custom ?? [])];
+    const byId = new Map(meals.map((m) => [m.id, m]));
+    const likes = new Map(Object.entries(state?.likes ?? {})) as Map<string, Like>;
+    const pantry = new Set(state?.pantry ?? []);
     return {
       state,
       error,
       meals,
-      mealById: (id) => meals.find((m) => m.id === id),
+      mealById: (id) => byId.get(id),
       context: contextFrom(state?.log ?? [], now),
+      world: state ? { plan: state.plan, log: state.log, rules: state.rules, meal: (id) => byId.get(id) } : null,
+      taste: { likes, log: state?.log ?? [], pantry, now },
       now,
-      saved: new Set(state?.saved ?? []),
-      pantry: new Set(state?.pantry ?? []),
-      refresh, setSaved, setPantry, logMeal, saveRules, addMeal, deleteMeal,
+      today: dayKey(now),
+      pantry,
+      likes,
+      photo: (id) => api.photoUrl(id, state?.photos[id]),
+      refresh, setLike, setPantry, logMeal, saveRules, addMeal, deleteMeal, setSlot, fillWeek,
     };
-  }, [state, error, now, refresh, setSaved, setPantry, logMeal, saveRules, addMeal, deleteMeal]);
+  }, [state, error, now, refresh, setLike, setPantry, logMeal, saveRules, addMeal, deleteMeal, setSlot, fillWeek]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
-}
-
-/**
- * After a failed write, undo just that write: other changes made since (a
- * refresh, another tap) stay. Saved, at-home and the log are sets of ids, so
- * the change can be reversed field by field.
- */
-function restore(before: api.AppState, now: api.AppState, apply: (s: api.AppState) => api.AppState): Partial<api.AppState> {
-  const after = apply(before);
-  const out: Partial<api.AppState> = {};
-  for (const key of ['saved', 'pantry'] as const) {
-    if (after[key] === before[key]) continue;
-    const added = after[key].filter((x) => !before[key].includes(x));
-    const removed = before[key].filter((x) => !after[key].includes(x));
-    out[key] = [...now[key].filter((x) => !added.includes(x)), ...removed.filter((x) => !now[key].includes(x))];
-  }
-  if (after.log !== before.log) {
-    const addedIds = after.log.filter((e) => !before.log.some((b) => b.id === e.id)).map((e) => e.id);
-    const removed = before.log.filter((e) => !after.log.some((a) => a.id === e.id));
-    out.log = [...now.log.filter((e) => !addedIds.includes(e.id)), ...removed.filter((e) => !now.log.some((n) => n.id === e.id))]
-      .sort((a, b) => b.eatenAt.localeCompare(a.eatenAt));
-  }
-  if (after.custom !== before.custom) {
-    const removed = before.custom.filter((m) => !after.custom.some((a) => a.id === m.id));
-    out.custom = [...now.custom, ...removed.filter((m) => !now.custom.some((n) => n.id === m.id))];
-  }
-  return out;
 }
