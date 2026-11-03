@@ -2,24 +2,25 @@
 
 /**
  * "Add to my week": the next seven days for this meal's slot, each marked
- * whether it fits that day. A day where it would break a limit opens what to
- * have there instead - meals that do fit, favourites first.
+ * whether it fits that day. A day where it would break a limit opens the ways
+ * to make it work: change the recipe, change another meal that day or later
+ * in the week, another day, or another meal (components/MakeItWork.tsx).
  */
 
 import { useState } from 'react';
 
 import { useData } from './DataProvider';
-import MealPhoto from './MealPhoto';
+import MakeItWork from './MakeItWork';
 import Sheet from './Sheet';
 import { useToast } from './Toast';
 import { Icon } from './ui';
 import type { Meal } from '@/lib/catalog';
 import { addDays, dayName, monthDay, type DayKey } from '@/lib/dates';
-import { alternatives, checkSlot, planned } from '@/lib/plan';
-import { mealTypeLabel, totals } from '@/lib/rules';
+import { checkSlot, planned } from '@/lib/plan';
+import { mealTypeLabel } from '@/lib/rules';
 
 export default function AddToWeek({ meal, onClose }: { meal: Meal; onClose: () => void }) {
-  const { world, meals, taste, today, mealById, setSlot } = useData();
+  const { world, today, mealById, setSlot } = useData();
   const toast = useToast();
   const [open, setOpen] = useState<DayKey | null>(null);
   if (!world) return null;
@@ -61,32 +62,13 @@ export default function AddToWeek({ meal, onClose }: { meal: Meal; onClose: () =
                   <span className="flex max-w-[45%] items-center gap-1 text-right text-sm font-bold text-fail-fg"><Icon name="fail" size={18} stroke={2.6} />{fail ? shortReason(fail.text) : 'Over'}</span>
                 )}
               </button>
-              {open === d && <Instead world={world} date={d} meal={meal} onPick={(m) => place(d, m)} />}
+              {open === d && <MakeItWork date={d} slot={slot} meal={meal} onDone={onClose} />}
             </li>
           );
         })}
       </ul>
     </Sheet>
   );
-
-  function Instead({ world: w, date, meal: m, onPick }: { world: NonNullable<typeof world>; date: DayKey; meal: Meal; onPick: (m: Meal) => void }) {
-    const alt = alternatives(w, meals, taste, date, slot, m, today);
-    return (
-      <div className="flex flex-col gap-2 rounded-2xl bg-field/60 p-3">
-        <p className="text-[15px] font-bold">{alt.instead.length ? 'That day is full. Have one of these instead:' : 'Nothing fits that day. Try another day.'}</p>
-        {alt.instead.map((x) => (
-          <button key={x.id} onClick={() => onPick(x)} className="flex items-center gap-3 rounded-xl bg-surface p-2 text-left">
-            <MealPhoto meal={x} className="size-12 shrink-0" rounded="rounded-lg" />
-            <span className="flex flex-1 flex-col">
-              <span className="font-bold leading-snug">{x.name}</span>
-              <span className="text-sm text-muted">{Math.round(totals(x.items).carbs)} g carbs</span>
-            </span>
-            <Icon name="plus" size={20} className="text-accent" />
-          </button>
-        ))}
-      </div>
-    );
-  }
 }
 
 /** "Over the cholesterol for today" → "Cholesterol", for a narrow column. */

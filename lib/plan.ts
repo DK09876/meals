@@ -35,18 +35,23 @@ const SLOTS = MEAL_TYPES.map((t) => t.id);
 export const planned = (world: World, date: DayKey, slot: MealType) =>
   world.plan.find((p) => p.date === date && p.slot === slot);
 
-/** Everything that counts toward a day, leaving one slot out. */
+/**
+ * Everything that counts toward a day, leaving one slot out. What she
+ * actually ate wins over what was planned: if lunch was planned as soup but
+ * she had the wrap, the wrap is what the rest of the day is checked against.
+ */
 function dayItems(world: World, date: DayKey, except?: MealType): Item[][] {
   const out: Item[][] = [];
   for (const slot of SLOTS) {
     if (slot === except) continue;
-    const p = planned(world, date, slot);
-    const meal = p && world.meal(p.mealId);
-    if (meal) {
-      out.push(meal.items);
+    const eaten = world.log.filter((e) => e.type === slot && keyOfIso(e.eatenAt) === date);
+    if (eaten.length) {
+      for (const e of eaten) out.push(e.items);
       continue;
     }
-    for (const e of world.log) if (e.type === slot && keyOfIso(e.eatenAt) === date) out.push(e.items);
+    const p = planned(world, date, slot);
+    const meal = p && world.meal(p.mealId);
+    if (meal) out.push(meal.items);
   }
   return out;
 }

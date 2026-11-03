@@ -17,6 +17,7 @@ import { Suspense, useState } from 'react';
 import AddToWeek from '@/components/AddToWeek';
 import { useData, type SlotRefusal } from '@/components/DataProvider';
 import LikePrompt from '@/components/LikePrompt';
+import MakeItWork from '@/components/MakeItWork';
 import MealPhoto from '@/components/MealPhoto';
 import PhotoPicker from '@/components/PhotoPicker';
 import Sheet from '@/components/Sheet';
@@ -252,22 +253,7 @@ function Recipe() {
       {refusal && at && (
         <Sheet title="That doesn't fit that day" onClose={() => setRefusal(null)}>
           <p className="-mt-2 text-muted">{refusal.error}</p>
-          {refusal.instead.length > 0 && <p className="font-bold">Have one of these instead:</p>}
-          <ul className="flex flex-col gap-2">
-            {refusal.instead.map((mid) => {
-              const m = data.mealById(mid);
-              return m ? (
-                <li key={mid}>
-                  <button onClick={() => { setRefusal(null); putHere(mid); }} className="flex w-full items-center gap-3 rounded-2xl border border-line p-2 text-left">
-                    <MealPhoto meal={m} className="size-14 shrink-0" rounded="rounded-xl" />
-                    <span className="flex-1 font-bold">{m.name}</span>
-                    <Icon name="plus" size={20} className="text-accent" />
-                  </button>
-                </li>
-              ) : null;
-            })}
-          </ul>
-          {refusal.otherDays.length > 0 && <p className="text-[15px]">Or have {meal.name.toLowerCase()} on {refusal.otherDays.map((d) => dayWord(d)).join(', ')}.</p>}
+          <MakeItWork date={at.date} slot={at.slot} meal={meal} onDone={() => { setRefusal(null); router.push('/'); }} />
         </Sheet>
       )}
     </>
