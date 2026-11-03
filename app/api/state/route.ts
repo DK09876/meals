@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { isAdmin, passwordSet } from '@/lib/admin';
 import { addDays, dayKey } from '@/lib/dates';
 import { getRules, getSetting, listCustomMeals, listLikes, listLog, listPantry, listPhotos, listPlan, listProfiles } from '@/lib/db';
+import { ensurePhotos } from '@/lib/auto-photos';
 import { requireProfile } from '@/lib/profile-route';
 
 export const runtime = 'nodejs';
@@ -21,6 +22,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
+  ensurePhotos();
   const { rules, updatedAt } = getRules(who.profile);
   return NextResponse.json(
     {
