@@ -69,8 +69,8 @@ function Header() {
     return (
       <header className="safe-x flex items-center justify-between gap-2 pb-2 pt-[max(14px,env(safe-area-inset-top))]">
         <ProfileSwitcher />
-        <button onClick={() => setMode('grandma')} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-accent-soft px-3 text-[15px] font-bold text-accent-ink">
-          Grandma&apos;s view
+        <button onClick={() => setMode('grandma')} className="flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-accent-soft px-3 text-[15px] font-bold text-accent-ink">
+          Exit admin
         </button>
       </header>
     );

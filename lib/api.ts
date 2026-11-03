@@ -83,6 +83,7 @@ export async function uploadPhoto(mealId: string, file: File) {
   form.append('file', file);
   return fetch(url(`photos/${encodeURIComponent(mealId)}`), { method: 'POST', body: form }).then(json<{ ok: true }>);
 }
+export const setStore = (store: string) => send<{ ok: true; store: string }>('settings', 'PUT', { store });
 export const photoUrl = (mealId: string, info?: PhotoInfo) => (info ? `/api/photos/${encodeURIComponent(mealId)}?v=${encodeURIComponent(info.v)}` : null);
 export const setPantry = (foodId: string, on: boolean) => send<{ ok: true }>('pantry', 'PUT', { foodId, on });
 export const logMeal = (mealId: string) => send<{ entry: LogEntry }>('log', 'POST', { mealId }).then((b) => b.entry);

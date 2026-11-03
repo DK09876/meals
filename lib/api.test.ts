@@ -38,6 +38,7 @@ const routes = async () => ({
   plan: await import('@/app/api/plan/route'),
   photo: await import('@/app/api/photos/[id]/route'),
   photoSearch: await import('@/app/api/photos/search/route'),
+  settings: await import('@/app/api/settings/route'),
 });
 
 let cookie = '';
@@ -269,6 +270,18 @@ describe('photos', () => {
     const ctx = { params: Promise.resolve({ id: 'apple-pb' }) };
     expect((await (await r.photo.POST(req('photos/apple-pb', 'POST', { thumb: 'https://evil.example/x.jpg' }), ctx)).json()).error).toMatch(/Only Wikimedia/);
     expect((await (await r.photo.POST(req('photos/apple-pb', 'POST', { thumb: 'https://upload.wikimedia.org/x.jpg' }), { params: Promise.resolve({ id: 'apple-pb' }) })).json()).error).toMatch(/not a JPEG/);
+  });
+});
+
+describe('store setting', () => {
+  it('saves an Instacart store for admins only, and only a plain slug', async () => {
+    const r = await setup();
+    expect((await r.settings.PUT(req('settings', 'PUT', { store: 'costco' }, false))).status).toBe(403);
+    expect((await r.settings.PUT(req('settings', 'PUT', { store: '../x' }))).status).toBe(400);
+    expect((await r.settings.PUT(req('settings', 'PUT', { store: 'Costco' }))).status).toBe(200);
+    expect((await state(r)).store).toBe('costco');
+    await r.settings.PUT(req('settings', 'PUT', { store: '' }));
+    expect((await state(r)).store).toBe('');
   });
 });
 
