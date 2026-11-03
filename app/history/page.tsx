@@ -1,52 +1,21 @@
 'use client';
 
-/** Saved meals, and what she ate - with this week's egg yolks at a glance. */
+/** What she ate, by day - with this week's egg yolks at a glance. */
 
 import Link from 'next/link';
-import { useState } from 'react';
 
 import { useData } from '@/components/DataProvider';
-import { Icon, Segmented, TONE } from '@/components/ui';
+import { Icon } from '@/components/ui';
 import { groupByDay, timeLabel } from '@/lib/history';
-import { evaluate, mealTypeLabel, totals } from '@/lib/rules';
+import { mealTypeLabel, totals } from '@/lib/rules';
 
-export default function SavedPage() {
-  const [view, setView] = useState<'saved' | 'history'>('saved');
+export default function HistoryPage() {
   return (
     <>
-      <h1 className="text-[30px] font-bold leading-tight">Saved &amp; history</h1>
-      <Segmented label="Saved or history" options={[{ id: 'saved', label: 'Saved' }, { id: 'history', label: 'History' }]} value={view} onChange={setView} />
-      {view === 'saved' ? <Saved /> : <History />}
+      <Link href="/settings" className="-ml-1 flex min-h-11 items-center gap-1 self-start pr-3 text-[17px] font-bold text-accent"><Icon name="back" size={22} />Settings</Link>
+      <h1 className="text-[30px] font-bold leading-tight">What she ate</h1>
+      <History />
     </>
-  );
-}
-
-function Saved() {
-  const { state, saved, mealById, context } = useData();
-  if (!state) return null;
-  const meals = [...saved].map(mealById).filter((m) => m !== undefined);
-  if (!meals.length) return <p className="py-6 text-center text-muted">Nothing saved yet. Tap the bookmark on any idea.</p>;
-  return (
-    <ul className="flex flex-col gap-2.5">
-      {meals.map((m) => {
-        const e = evaluate(m.items, m.type, state.rules, context);
-        return (
-          <li key={m.id}>
-            <Link href={`/meal/${m.id}`} className="card flex items-center gap-3.5 px-4 py-3.5">
-              <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl ${TONE[e.verdict.status]}`} title={e.verdict.text}>
-                <Icon name={e.verdict.status} size={22} stroke={2.6} />
-                <span className="sr-only">{e.verdict.text}</span>
-              </span>
-              <span className="flex flex-1 flex-col">
-                <span className="font-bold">{m.name}</span>
-                <span className="text-sm text-muted">{mealTypeLabel(m.type)} · {Math.round(e.totals.carbs)} g carbs{m.minutes ? ` · ${m.minutes} min` : ''}</span>
-              </span>
-              <Icon name="next" size={20} className="text-muted" />
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

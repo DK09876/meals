@@ -6,16 +6,24 @@
 import type { Meal } from './catalog';
 import type { LogEntry } from './history';
 import { getProfile, type Profile } from './profile';
+import type { PlanEntry } from './plan';
 import type { Item, MealType, Rules } from './rules';
+
+export interface PhotoInfo { v: string; credit: string; license: string; page: string }
 
 export interface AppState {
   profile: Profile;
   rules: Rules;
   rulesUpdatedAt: string;
-  saved: string[];
+  likes: Record<string, 1 | -1>;
+  plan: PlanEntry[];
   pantry: string[];
   custom: Meal[];
   log: LogEntry[];
+  photos: Record<string, PhotoInfo>;
+  admin: boolean;
+  adminConfigured: boolean;
+  store: string;
 }
 
 const url = (path: string) => {
@@ -57,9 +65,28 @@ export async function fetchState(): Promise<{ state: AppState; build: string | n
 export const patchRules = (changes: Partial<Rules>, base: string) =>
   send<{ rules: Rules; rulesUpdatedAt: string }>('rules', 'PATCH', { changes, base });
 
-export const setSaved = (mealId: string, on: boolean) => send<{ ok: true }>('saved', 'PUT', { mealId, on });
+export const setLike = (mealId: string, value: 1 | 0 | -1) => send<{ ok: true }>('likes', 'PUT', { mealId, value });
+export const setSlot = (date: string, slot: MealType, mealId: string | null, opts: { force?: boolean; weekStart?: string } = {}) =>
+  send<{ ok: true }>('plan', 'PUT', { date, slot, mealId, ...opts });
+export const fillWeek = (start: string) => send<{ added: number }>('plan', 'POST', { action: 'fill', start }).then((b) => b.added);
+
+export const adminStatus = () => fetch('/api/admin', { cache: 'no-store' }).then(json<{ configured: boolean; admin: boolean }>);
+export const adminAction = (body: { action: 'setup' | 'login' | 'logout' | 'change'; password?: string; current?: string; next?: string }) =>
+  send<{ ok: true }>('admin', 'POST', body);
+
+export interface Candidate { title: string; thumb: string; page: string; license: string; credit: string }
+export const searchPhotos = (q: string) => fetch(url(`photos/search?q=${encodeURIComponent(q)}`)).then(json<{ candidates: Candidate[] }>).then((b) => b.candidates);
+export const choosePhoto = (mealId: string, c: Candidate) => send<{ ok: true }>(`photos/${encodeURIComponent(mealId)}`, 'POST', c);
+export const autoPhotos = () => send<{ added: number; missing: string[] }>('photos/auto', 'POST');
+export async function uploadPhoto(mealId: string, file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return fetch(url(`photos/${encodeURIComponent(mealId)}`), { method: 'POST', body: form }).then(json<{ ok: true }>);
+}
+export const photoUrl = (mealId: string, info?: PhotoInfo) => (info ? `/api/photos/${encodeURIComponent(mealId)}?v=${encodeURIComponent(info.v)}` : null);
 export const setPantry = (foodId: string, on: boolean) => send<{ ok: true }>('pantry', 'PUT', { foodId, on });
 export const logMeal = (mealId: string) => send<{ entry: LogEntry }>('log', 'POST', { mealId }).then((b) => b.entry);
 export const unlog = (id: string) => send<{ ok: true }>(`log?id=${encodeURIComponent(id)}`, 'DELETE');
-export const addMeal = (type: MealType, items: Item[], name?: string) => send<{ meal: Meal }>('meals', 'POST', { type, items, name }).then((b) => b.meal);
+export const addMeal = (type: MealType, items: Item[], extra: { name?: string; steps?: string[]; minutes?: number | null; note?: string; source?: 'built' | 'fixed' | 'chat' } = {}) =>
+  send<{ meal: Meal }>('meals', 'POST', { type, items, ...extra }).then((b) => b.meal);
 export const deleteMeal = (id: string) => send<{ ok: true }>(`meals/${encodeURIComponent(id)}`, 'DELETE');

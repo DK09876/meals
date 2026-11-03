@@ -73,6 +73,21 @@ function open(): Database {
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_log_profile ON meal_log (profileId, eatenAt)`);
+  // Added with the week planner (2026-11-02).
+  const customCols = (db.all('PRAGMA table_info(custom_meals)') as Array<{ name: string }>).map((c) => c.name);
+  if (!customCols.includes('steps')) db.run(`ALTER TABLE custom_meals ADD COLUMN steps TEXT NOT NULL DEFAULT '[]'`);
+  if (!customCols.includes('minutes')) db.run(`ALTER TABLE custom_meals ADD COLUMN minutes INTEGER`);
+  if (!customCols.includes('note')) db.run(`ALTER TABLE custom_meals ADD COLUMN note TEXT`);
+  if (!customCols.includes('source')) db.run(`ALTER TABLE custom_meals ADD COLUMN source TEXT NOT NULL DEFAULT 'built'`);
+  // 1 = a favourite, -1 = "not for me" (never suggested). No row = no opinion.
+  db.run(`CREATE TABLE IF NOT EXISTS likes (profileId TEXT NOT NULL, mealId TEXT NOT NULL, value INTEGER NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (profileId, mealId))`);
+  // Bookmarks from v1 became favourites.
+  db.run(`INSERT OR IGNORE INTO likes (profileId, mealId, value, updatedAt) SELECT profileId, mealId, 1, createdAt FROM saved`);
+  db.run(`DELETE FROM saved`);
+  db.run(`CREATE TABLE IF NOT EXISTS plan (profileId TEXT NOT NULL, date TEXT NOT NULL, slot TEXT NOT NULL, mealId TEXT NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (profileId, date, slot))`);
+  db.run(`CREATE TABLE IF NOT EXISTS photos (mealId TEXT PRIMARY KEY, file TEXT NOT NULL, mime TEXT NOT NULL, credit TEXT NOT NULL DEFAULT '', license TEXT NOT NULL DEFAULT '', page TEXT NOT NULL DEFAULT '', updatedAt TEXT NOT NULL)`);
+  db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+  db.run(`CREATE TABLE IF NOT EXISTS admin_sessions (tokenHash TEXT PRIMARY KEY, createdAt TEXT NOT NULL, expiresAt TEXT NOT NULL)`);
   return db;
 }
 
@@ -154,15 +169,18 @@ export function patchRules(profileId: string, changes: Partial<Rules>, base: str
   return { ok: true, record: { rules, updatedAt } };
 }
 
-// --- saved and at-home ---------------------------------------------------
+// --- favourites and at-home ----------------------------------------------
 
-export function listSaved(profileId: string): string[] {
-  return (open().all('SELECT mealId FROM saved WHERE profileId = ? ORDER BY createdAt', [profileId]) as Array<{ mealId: string }>).map((r) => r.mealId);
+/** mealId → 1 (favourite) or -1 (not for me). */
+export function listLikes(profileId: string): Record<string, 1 | -1> {
+  const rows = open().all('SELECT mealId, value FROM likes WHERE profileId = ?', [profileId]) as Array<{ mealId: string; value: 1 | -1 }>;
+  return Object.fromEntries(rows.map((r) => [r.mealId, r.value]));
 }
 
-export function setSaved(profileId: string, mealId: string, on: boolean): void {
-  if (on) open().run('INSERT OR IGNORE INTO saved (profileId, mealId, createdAt) VALUES (?, ?, ?)', [profileId, mealId, now()]);
-  else open().run('DELETE FROM saved WHERE profileId = ? AND mealId = ?', [profileId, mealId]);
+/** 0 clears the opinion. */
+export function setLike(profileId: string, mealId: string, value: 1 | 0 | -1): void {
+  if (value === 0) open().run('DELETE FROM likes WHERE profileId = ? AND mealId = ?', [profileId, mealId]);
+  else open().run('INSERT INTO likes (profileId, mealId, value, updatedAt) VALUES (?, ?, ?, ?) ON CONFLICT (profileId, mealId) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt', [profileId, mealId, value, now()]);
 }
 
 export function listPantry(profileId: string): string[] {
@@ -176,29 +194,45 @@ export function setPantry(profileId: string, foodId: string, on: boolean): void 
 
 // --- built meals ---------------------------------------------------------
 
-interface CustomRow { id: string; type: MealType; name: string; items: string }
+interface CustomRow { id: string; type: MealType; name: string; items: string; steps: string; minutes: number | null; note: string | null; source: string }
 
-const toMeal = (row: CustomRow): Meal => ({ id: row.id, type: row.type, name: row.name, items: JSON.parse(row.items), minutes: null, steps: [], custom: true });
+const CUSTOM_COLS = 'id, type, name, items, steps, minutes, note, source';
+
+const toMeal = (row: CustomRow): Meal => ({
+  id: row.id, type: row.type, name: row.name, items: JSON.parse(row.items), minutes: row.minutes ?? null,
+  steps: JSON.parse(row.steps || '[]'), ...(row.note ? { note: row.note } : {}), custom: true,
+  source: row.source === 'chat' ? 'chat' : row.source === 'fixed' ? 'fixed' : 'built',
+});
 
 export function listCustomMeals(profileId: string): Meal[] {
-  return (open().all('SELECT id, type, name, items FROM custom_meals WHERE profileId = ? AND deletedAt IS NULL ORDER BY createdAt', [profileId]) as unknown as CustomRow[]).map(toMeal);
+  return (open().all(`SELECT ${CUSTOM_COLS} FROM custom_meals WHERE profileId = ? AND deletedAt IS NULL ORDER BY createdAt`, [profileId]) as unknown as CustomRow[]).map(toMeal);
 }
 
 export function customMealCount(profileId: string): number {
   return (open().get('SELECT count(*) AS c FROM custom_meals WHERE profileId = ?', [profileId]) as { c: number }).c;
 }
 
-export function addCustomMeal(profileId: string, type: MealType, name: string, items: Item[]): Meal {
-  const id = `c-${randomUUID()}`;
-  const clean = items.map(({ food, servings }) => ({ food, servings }));
-  open().run('INSERT INTO custom_meals (id, profileId, type, name, items, createdAt) VALUES (?, ?, ?, ?, ?, ?)', [id, profileId, type, name, JSON.stringify(clean), now()]);
-  return { id, type, name, items: clean, minutes: null, steps: [], custom: true };
+export interface CustomExtras {
+  steps?: string[];
+  minutes?: number | null;
+  note?: string;
+  /** built on the Build screen, a fixed copy of another recipe, or from chat. */
+  source?: 'built' | 'fixed' | 'chat';
 }
 
-/** Kept in the table, so history and backups still know what it was. Unsaved as well. */
+export function addCustomMeal(profileId: string, type: MealType, name: string, items: Item[], extras: CustomExtras = {}): Meal {
+  const id = `c-${randomUUID()}`;
+  const clean = items.map(({ food, servings, label }) => (label ? { food, servings, label } : { food, servings }));
+  open().run('INSERT INTO custom_meals (id, profileId, type, name, items, steps, minutes, note, source, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [id, profileId, type, name, JSON.stringify(clean), JSON.stringify(extras.steps ?? []), extras.minutes ?? null, extras.note ?? null, extras.source ?? 'built', now()]);
+  return toMeal({ id, type, name, items: JSON.stringify(clean), steps: JSON.stringify(extras.steps ?? []), minutes: extras.minutes ?? null, note: extras.note ?? null, source: extras.source ?? 'built' });
+}
+
+/** Kept in the table, so history and backups still know what it was. Taken off favourites and the plan. */
 export function deleteCustomMeal(profileId: string, id: string): boolean {
   const result = open().run('UPDATE custom_meals SET deletedAt = ? WHERE id = ? AND profileId = ? AND deletedAt IS NULL', [now(), id, profileId]);
-  open().run('DELETE FROM saved WHERE profileId = ? AND mealId = ?', [profileId, id]);
+  open().run('DELETE FROM likes WHERE profileId = ? AND mealId = ?', [profileId, id]);
+  open().run('DELETE FROM plan WHERE profileId = ? AND mealId = ?', [profileId, id]);
   return result.changes > 0;
 }
 
@@ -206,7 +240,7 @@ export function deleteCustomMeal(profileId: string, id: string): boolean {
 export function findMeal(profileId: string, id: string): Meal | undefined {
   const builtIn = catalogMeal(id);
   if (builtIn) return builtIn;
-  const row = open().get('SELECT id, type, name, items FROM custom_meals WHERE id = ? AND profileId = ? AND deletedAt IS NULL', [id, profileId]) as CustomRow | null;
+  const row = open().get(`SELECT ${CUSTOM_COLS} FROM custom_meals WHERE id = ? AND profileId = ? AND deletedAt IS NULL`, [id, profileId]) as CustomRow | null;
   return row ? toMeal(row) : undefined;
 }
 
@@ -232,3 +266,69 @@ export function logMeal(profileId: string, meal: Meal, eatenAt = now()): LogEntr
 export function deleteLogEntry(profileId: string, id: string): boolean {
   return open().run('DELETE FROM meal_log WHERE id = ? AND profileId = ?', [id, profileId]).changes > 0;
 }
+
+// --- the week plan ---------------------------------------------------------
+
+export interface PlanRow { date: string; slot: MealType; mealId: string }
+
+/** From two weeks back onward: enough for "this week" and planning ahead. */
+export function listPlan(profileId: string, from: string): PlanRow[] {
+  return open().all('SELECT date, slot, mealId FROM plan WHERE profileId = ? AND date >= ? ORDER BY date, slot', [profileId, from]) as unknown as PlanRow[];
+}
+
+/** Puts a meal in a slot, replacing what was there; null empties it. */
+export function setPlanSlot(profileId: string, date: string, slot: MealType, mealId: string | null): void {
+  if (mealId === null) open().run('DELETE FROM plan WHERE profileId = ? AND date = ? AND slot = ?', [profileId, date, slot]);
+  else open().run('INSERT INTO plan (profileId, date, slot, mealId, updatedAt) VALUES (?, ?, ?, ?, ?) ON CONFLICT (profileId, date, slot) DO UPDATE SET mealId = excluded.mealId, updatedAt = excluded.updatedAt', [profileId, date, slot, mealId, now()]);
+}
+
+/** Fills only slots that are still empty - two phones filling at once cannot overwrite each other. */
+export function addPlanEntries(profileId: string, entries: PlanRow[]): number {
+  let added = 0;
+  for (const e of entries) {
+    added += open().run('INSERT OR IGNORE INTO plan (profileId, date, slot, mealId, updatedAt) VALUES (?, ?, ?, ?, ?)', [profileId, e.date, e.slot, e.mealId, now()]).changes;
+  }
+  return added;
+}
+
+// --- photos ----------------------------------------------------------------
+
+export interface PhotoRow { mealId: string; file: string; mime: string; credit: string; license: string; page: string; updatedAt: string }
+
+export const getPhoto = (mealId: string) => open().get('SELECT * FROM photos WHERE mealId = ?', [mealId]) as unknown as PhotoRow | null;
+
+/** mealId → version, for cache-busting image URLs. */
+export function listPhotos(): Record<string, { v: string; credit: string; license: string; page: string }> {
+  const rows = open().all('SELECT mealId, credit, license, page, updatedAt FROM photos') as unknown as PhotoRow[];
+  return Object.fromEntries(rows.map((r) => [r.mealId, { v: r.updatedAt, credit: r.credit, license: r.license, page: r.page }]));
+}
+
+export function savePhotoRow(row: Omit<PhotoRow, 'updatedAt'>): void {
+  open().run('INSERT INTO photos (mealId, file, mime, credit, license, page, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (mealId) DO UPDATE SET file = excluded.file, mime = excluded.mime, credit = excluded.credit, license = excluded.license, page = excluded.page, updatedAt = excluded.updatedAt',
+    [row.mealId, row.file, row.mime, row.credit, row.license, row.page, stamp()]);
+}
+
+// --- settings and admin sessions --------------------------------------------
+
+export function getSetting(key: string): string | null {
+  return (open().get('SELECT value FROM settings WHERE key = ?', [key]) as { value: string } | null)?.value ?? null;
+}
+
+export function setSetting(key: string, value: string | null): void {
+  if (value === null) open().run('DELETE FROM settings WHERE key = ?', [key]);
+  else open().run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', [key, value]);
+}
+
+export function addSession(tokenHash: string, expiresAt: string): void {
+  open().run('DELETE FROM admin_sessions WHERE expiresAt < ?', [now()]);
+  open().run('INSERT INTO admin_sessions (tokenHash, createdAt, expiresAt) VALUES (?, ?, ?)', [tokenHash, now(), expiresAt]);
+}
+
+export const sessionValid = (tokenHash: string) =>
+  !!open().get('SELECT 1 AS ok FROM admin_sessions WHERE tokenHash = ? AND expiresAt > ?', [tokenHash, now()]);
+
+export const deleteSession = (tokenHash: string) => open().run('DELETE FROM admin_sessions WHERE tokenHash = ?', [tokenHash]);
+export const deleteAllSessions = () => open().run('DELETE FROM admin_sessions');
+
+/** The database file's folder - photos live beside it, so one folder is the whole backup. */
+export const DATA_DIR = dirname(DB_PATH);

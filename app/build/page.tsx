@@ -8,6 +8,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
+import AdminGate from '@/components/AdminGate';
 import { useData } from '@/components/DataProvider';
 import { CarbMeter, Chips, Icon, Segmented, Verdict } from '@/components/ui';
 import { foodsIn, GROUPS } from '@/lib/foods';
@@ -17,7 +18,7 @@ import { mealTypeAt } from '@/lib/suggest';
 
 export default function BuildPage() {
   // useSearchParams needs a Suspense boundary for the static build.
-  return <Suspense><Build /></Suspense>;
+  return <AdminGate><Suspense><Build /></Suspense></AdminGate>;
 }
 
 function Build() {

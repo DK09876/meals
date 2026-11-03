@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin';
 import { createProfile, listProfiles } from '@/lib/db';
 import { bad, readJson } from '@/lib/profile-route';
 
@@ -22,6 +23,11 @@ const MAX_NAME = 30;
 const MAX_PROFILES = 20;
 
 export async function POST(request: Request) {
+  // The very first person can be added by anyone; after that it is an admin job.
+  if (listProfiles().length > 0) {
+    const denied = requireAdmin(request);
+    if (denied) return denied;
+  }
   const body = await readJson<{ name?: unknown }>(request);
   if (body instanceof NextResponse) return body;
   const name = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ') : '';

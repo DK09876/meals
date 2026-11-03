@@ -1,7 +1,8 @@
 /**
  * GET everything the screens need for one profile, in one go: her limits
- * (with their version, for the stale check), saved meals, the at-home list,
- * built meals and the last month of what she ate.
+ * (with their version, for the stale check), favourites, her week plan,
+ * the at-home list, built meals, photos, the last month of what she ate,
+ * and whether this phone is in admin mode.
  *
  * The x-meals-build header tells an open page which build the server is on;
  * a page from an older build reloads itself.
@@ -9,7 +10,9 @@
 
 import { NextResponse } from 'next/server';
 
-import { getRules, listCustomMeals, listLog, listPantry, listProfiles, listSaved } from '@/lib/db';
+import { isAdmin, passwordSet } from '@/lib/admin';
+import { addDays, dayKey } from '@/lib/dates';
+import { getRules, getSetting, listCustomMeals, listLikes, listLog, listPantry, listPhotos, listPlan, listProfiles } from '@/lib/db';
 import { requireProfile } from '@/lib/profile-route';
 
 export const runtime = 'nodejs';
@@ -24,7 +27,12 @@ export async function GET(request: Request) {
       profile: listProfiles().find((p) => p.id === who.profile),
       rules,
       rulesUpdatedAt: updatedAt,
-      saved: listSaved(who.profile),
+      likes: listLikes(who.profile),
+      plan: listPlan(who.profile, addDays(dayKey(new Date()), -14)),
+      photos: listPhotos(),
+      admin: isAdmin(request),
+      adminConfigured: passwordSet(),
+      store: getSetting('instacart.store') ?? '',
       pantry: listPantry(who.profile),
       custom: listCustomMeals(who.profile),
       log: listLog(who.profile),

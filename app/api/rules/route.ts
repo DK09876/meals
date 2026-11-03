@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 
+import { requireAdmin } from '@/lib/admin';
 import { patchRules } from '@/lib/db';
 import { bad, readJson, requireProfile } from '@/lib/profile-route';
 import { cleanRuleChanges } from '@/lib/rules';
@@ -16,6 +17,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: Request) {
+  const denied = requireAdmin(request);
+  if (denied) return denied;
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
   const body = await readJson<{ changes?: unknown; base?: unknown }>(request);

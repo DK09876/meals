@@ -110,10 +110,12 @@ export interface Totals {
   vegServings: number;
   /** Carbs from grains, fruit and milk: the ones that need pairing. Veggies and nuts don't count. */
   pairedCarbs: number;
+  /** Servings from her handout's fat list (6 almonds, 1 tsp oil...). */
+  fatServings: number;
 }
 
 export function totals(items: Item[]): Totals {
-  const t: Totals = { carbs: 0, protein: 0, fat: 0, satFat: 0, sodium: 0, cholesterol: 0, yolks: 0, vegServings: 0, pairedCarbs: 0 };
+  const t: Totals = { carbs: 0, protein: 0, fat: 0, satFat: 0, sodium: 0, cholesterol: 0, yolks: 0, vegServings: 0, pairedCarbs: 0, fatServings: 0 };
   for (const { food: id, servings } of items) {
     const food = FOODS[id];
     if (!food) throw new Error(`Unknown food: ${id}`);
@@ -125,6 +127,7 @@ export function totals(items: Item[]): Totals {
     t.cholesterol += food.cholesterol * servings;
     t.yolks += (food.yolks ?? 0) * servings;
     if (food.group === 'veg') t.vegServings += servings;
+    if (food.group === 'fat') t.fatServings += servings;
     if (food.group === 'starch' || food.group === 'fruit' || food.group === 'milk') t.pairedCarbs += food.carbs * servings;
   }
   return t;
@@ -165,10 +168,11 @@ export function limitsFor(type: MealType, rules: Rules): Limits {
 
 /**
  * A carb counts as paired when the meal has a real serving of protein or
- * fat beside it - 5 g of protein (an egg's worth) or 4 g of fat (a teaspoon
- * of oil, six almonds). A slice of toast's own 4 g of protein is not a pairing.
+ * fat beside it: 5 g of protein (an egg's worth), 4 g of fat, or one full
+ * serving from her handout's fat list (6 almonds, 1 tsp oil, 2 Tbsp
+ * avocado). A slice of toast's own 4 g of protein is not a pairing.
  */
-export const PAIRING = { protein: 5, fat: 4 };
+export const PAIRING = { protein: 5, fat: 4, fatServings: 1 };
 
 const round = (n: number) => Math.round(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -197,10 +201,10 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
 
   checks.push(carbs <= limits.carbs
     ? { kind: 'carbs', status: 'ok', text: `Carbs ${carbs} of ${limits.carbs} g`, situational: false }
-    : { kind: 'carbs', status: 'fail', text: `${carbs - limits.carbs} g over her carb limit`, situational: false });
+    : { kind: 'carbs', status: 'fail', text: `${carbs - limits.carbs} g over the carb limit`, situational: false });
 
   if (t.pairedCarbs > 0) {
-    const paired = t.protein >= PAIRING.protein || t.fat >= PAIRING.fat;
+    const paired = t.protein >= PAIRING.protein || t.fat >= PAIRING.fat || t.fatServings >= PAIRING.fatServings;
     checks.push(paired
       ? { kind: 'pairing', status: 'ok', text: 'Carbs paired', situational: false }
       : { kind: 'pairing', status: 'fail', text: 'Needs a protein or fat', situational: false });
@@ -217,7 +221,7 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
   const satFatDay = round1(context.satFatToday + t.satFat);
   checks.push(satFatDay <= budget
     ? { kind: 'satFat', status: 'ok', text: `Sat. fat ${satFatDay} of ${budget} g today`, situational: true }
-    : { kind: 'satFat', status: 'fail', text: 'Over her saturated fat for today', situational: true });
+    : { kind: 'satFat', status: 'fail', text: 'Over the saturated fat for today', situational: true });
 
   // The plate method: half the plate veggies at lunch and dinner. Breakfast's
   // half can be empty or fruit, and a snack has no plate. A tip, not a rule.
@@ -231,7 +235,7 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
     const week = round(context.yolksThisWeek + t.yolks);
     checks.push(week <= rules.yolksWeek
       ? { kind: 'yolks', status: 'ok', text: `Egg yolk ${week} of ${rules.yolksWeek} this week`, situational: true }
-      : { kind: 'yolks', status: 'fail', text: 'Over her egg yolks this week', situational: true });
+      : { kind: 'yolks', status: 'fail', text: 'Over the egg yolks for this week', situational: true });
   }
 
   // Only worth a chip when the meal brings real cholesterol of its own.
@@ -239,7 +243,7 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
     const day = round(context.cholesterolToday + t.cholesterol);
     checks.push(day <= rules.cholesterolDay
       ? { kind: 'cholesterol', status: 'ok', text: `Cholesterol ${day} of ${rules.cholesterolDay} mg today`, situational: true }
-      : { kind: 'cholesterol', status: 'fail', text: 'Over her cholesterol for today', situational: true });
+      : { kind: 'cholesterol', status: 'fail', text: 'Over the cholesterol for today', situational: true });
   }
 
   const fails = checks.filter((c) => c.status === 'fail');
@@ -247,8 +251,8 @@ export function evaluate(items: Item[], type: MealType, rules: Rules, context: C
   const verdict: Evaluation['verdict'] =
     carbs > limits.carbs ? { status: 'fail', text: `Too many carbs: ${carbs - limits.carbs} g over` }
     : fails.length ? { status: 'fail', text: `Doesn't fit: ${fails[0].text.toLowerCase()}` }
-    : warns.length ? { status: 'warn', text: 'Fits her plan, with one tip' }
-    : { status: 'ok', text: 'Fits her plan' };
+    : warns.length ? { status: 'warn', text: 'Fits the plan, with one tip' }
+    : { status: 'ok', text: 'Fits the plan' };
 
   return {
     totals: t,

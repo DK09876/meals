@@ -1,5 +1,6 @@
 /**
- * POST { type, items: [{ food, servings }], name? } - save a meal built on the Build screen.
+ * POST { type, items: [{ food, servings, label? }], name?, steps?, minutes?, note?, source? }
+ * - save a meal built on the Build screen, a fixed copy of a recipe, or one found in chat.
  *
  * Checked here as well as on the phone: a meal that breaks one of her limits
  * on its own (carbs, pairing, sodium) is refused. One that is only over
@@ -24,9 +25,10 @@ function cleanItems(input: unknown): Item[] | null {
   if (!Array.isArray(input) || input.length === 0 || input.length > MAX_ITEMS) return null;
   const items: Item[] = [];
   for (const raw of input) {
-    const { food, servings } = (raw ?? {}) as { food?: unknown; servings?: unknown };
-    if (!isFood(food) || typeof servings !== 'number' || servings <= 0 || servings > MAX_SERVINGS || servings * 2 !== Math.round(servings * 2)) return null;
-    items.push({ food, servings });
+    const { food, servings, label } = (raw ?? {}) as { food?: unknown; servings?: unknown; label?: unknown };
+    // Halves from the Build screen; recipes also use quarters and thirds.
+    if (!isFood(food) || typeof servings !== 'number' || servings <= 0 || servings > MAX_SERVINGS || Math.abs(servings * 12 - Math.round(servings * 12)) > 0.05) return null;
+    items.push(typeof label === 'string' && label.trim() ? { food, servings, label: label.trim().slice(0, 80) } : { food, servings });
   }
   return items;
 }
@@ -34,7 +36,7 @@ function cleanItems(input: unknown): Item[] | null {
 export async function POST(request: Request) {
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
-  const body = await readJson<{ type?: unknown; items?: unknown; name?: unknown }>(request);
+  const body = await readJson<{ type?: unknown; items?: unknown; name?: unknown; steps?: unknown; minutes?: unknown; note?: unknown; source?: unknown }>(request);
   if (body instanceof NextResponse) return body;
   if (!isMealType(body.type)) return bad('Pick breakfast, lunch, dinner or snack');
   const items = cleanItems(body.items);
@@ -43,5 +45,9 @@ export async function POST(request: Request) {
   if (!evaluation.fitsAnyDay) return bad(evaluation.verdict.text);
   const given = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
   const name = given || `My ${mealTypeLabel(body.type).toLowerCase()} plate ${customMealCount(who.profile) + 1}`;
-  return NextResponse.json({ meal: addCustomMeal(who.profile, body.type, name, items) });
+  const steps = Array.isArray(body.steps) ? body.steps.filter((s): s is string => typeof s === 'string').map((s) => s.slice(0, 300)).slice(0, 15) : [];
+  const minutes = typeof body.minutes === 'number' && body.minutes > 0 && body.minutes < 600 ? Math.round(body.minutes) : null;
+  const note = typeof body.note === 'string' ? body.note.slice(0, 300) : undefined;
+  const source = body.source === 'chat' || body.source === 'fixed' ? body.source : 'built';
+  return NextResponse.json({ meal: addCustomMeal(who.profile, body.type, name, items, { steps, minutes, note, source }) });
 }

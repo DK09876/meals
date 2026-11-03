@@ -27,6 +27,15 @@ const PATHS = {
   sliders: 'M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4',
   receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6',
   trash: 'M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13',
+  heart: 'M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z',
+  lock: 'M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z',
+  calendar: 'M4 6h16v14H4zM4 10h16M8 3v4M16 3v4',
+  cart: 'M3 4h2l2.4 10.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2M10 19.5a1 1 0 1 0 0 .01M17 19.5a1 1 0 1 0 0 .01',
+  chat: 'M5 5h14v10H9l-4 4z',
+  mic: 'M12 4a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V7a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v3',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  wand: 'M5 19L15 9M14 4v2M18 6h2M19 10v1M15 9l-2-2',
+  camera: 'M4 8h4l2-3h4l2 3h4v11H4zM12 11a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
 } as const;
 
 export type IconName = keyof typeof PATHS;
