@@ -101,7 +101,7 @@ Check the guard from another tailnet device: `nc -z <meals 100.x> 443` and
 sudo apt-get install -y cmake ffmpeg
 git clone --depth 1 https://github.com/ggml-org/whisper.cpp ~/whisper.cpp && cd ~/whisper.cpp
 cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j4 --target whisper-server
-sh ./models/download-ggml-model.sh base.en
+sh ./models/download-ggml-model.sh tiny.en   # ~4 s a request on a Pi 4; base.en is ~9 s
 sudo cp ~/development/meals/deploy/whisper.service /etc/systemd/system/ && sudo systemctl enable --now whisper
 ```
 

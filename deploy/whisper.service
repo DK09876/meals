@@ -7,8 +7,11 @@ Type=simple
 User=admin
 WorkingDirectory=/home/admin/whisper.cpp
 # --convert: the iPhone records AAC; ffmpeg turns it into the WAV whisper wants.
+# tiny.en with a 15 s audio window (-ac 768): about 4 s per request on the Pi 4,
+# against 9 s for base.en - timed 2026-11-02, both word-perfect on the sample.
+# Recordings stop at 15 s to match (components/MicButton.tsx).
 # Nice: transcribing takes all four cores for a few seconds; the apps come first.
-ExecStart=/home/admin/whisper.cpp/build/bin/whisper-server -m models/ggml-base.en.bin --host 127.0.0.1 --port 8792 --convert -t 4 -l en
+ExecStart=/home/admin/whisper.cpp/build/bin/whisper-server -m models/ggml-tiny.en.bin --host 127.0.0.1 --port 8792 --convert -t 4 -ac 768 -l en
 Nice=10
 Restart=on-failure
 RestartSec=5

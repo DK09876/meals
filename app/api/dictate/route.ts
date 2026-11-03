@@ -1,5 +1,5 @@
 /**
- * POST audio (multipart "audio", up to 30 s) - the words in it, as text.
+ * POST audio (multipart "audio", up to 15 s) - the words in it, as text.
  *
  * Speech to text runs on the Pi itself, with whisper.cpp's server
  * (deploy/whisper.service, 127.0.0.1:8792): free, and her voice never leaves

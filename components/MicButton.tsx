@@ -12,7 +12,8 @@ import { useToast } from './Toast';
 import { Icon } from './ui';
 import * as api from '@/lib/api';
 
-const MAX_MS = 20_000;
+// whisper on the Pi listens to at most 15 s (deploy/whisper.service).
+const MAX_MS = 15_000;
 
 export default function MicButton({ onText, big = false }: { onText: (text: string) => void; big?: boolean }) {
   const toast = useToast();
