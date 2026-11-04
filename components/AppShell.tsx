@@ -10,7 +10,7 @@
  */
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import DataProvider, { useData } from './DataProvider';
 import { TestingBanner } from './Feedback';
@@ -64,14 +64,19 @@ function ForProfile({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Screens that only exist in admin mode; leaving admin on one goes back to her week. */
+const ADMIN_ONLY = ['/groceries', '/pantry', '/settings', '/build', '/history'];
+
 function Header() {
   const mode = useMode();
   const { state } = useData();
+  const path = usePathname();
+  const router = useRouter();
   if (mode === 'admin') {
     return (
       <header className="safe-x flex items-center justify-between gap-2 pb-2 pt-[max(14px,env(safe-area-inset-top))]">
         <ProfileSwitcher />
-        <button onClick={() => setMode('grandma')} className="flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-accent-soft px-3 text-[15px] font-bold text-accent-ink">
+        <button onClick={() => { setMode('grandma'); if (ADMIN_ONLY.some((p) => path.startsWith(p))) router.push('/'); }} className="flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl bg-accent-soft px-3 text-[15px] font-bold text-accent-ink">
           Exit admin
         </button>
       </header>
