@@ -59,7 +59,7 @@ export function fixesFor(world: World, meals: Meal[], taste: Taste, date: DayKey
   const fixes: Fix[] = [];
 
   // 1. Change this recipe - kept only if the rest of the plan still fits around the changed copy.
-  for (const adjust of makeItFit(picked.items, slot, world.rules, slotContext(base, date, slot), 3)) {
+  for (const adjust of makeItFit(picked.items, slot, world.rules, slotContext(base, date, slot), 3, world.avoided)) {
     const copy: Meal = { ...picked, id: '__adjusted', items: adjust.items };
     const placed: World = { ...withSlot(base, date, slot, copy.id), meal: (id) => (id === copy.id ? copy : base.meal(id)) };
     if (!planHolds(placed, span.from, span.to)) continue;
@@ -129,6 +129,13 @@ export function problems(world: World, meals: Meal[], taste: Taste, from: DayKey
       if (!p || eatenFor(world.log, date, slot)) continue;
       const meal = world.meal(p.mealId);
       if (!meal) continue;
+      const avoided = world.ruledOut?.(meal.id);
+      if (avoided) {
+        const base = withSlot(world, date, slot, null);
+        const instead = alternatives(base, meals, taste, date, slot, meal, today).instead.slice(0, 3);
+        out.push({ date, slot, meal, reason: `it ${avoided}, which she doesn't eat`, fixes: instead.map((m) => ({ kind: 'instead' as const, mealId: m.id, text: `Have ${m.name} instead` })) });
+        continue;
+      }
       const evaluation = checkSlot(world, date, slot, meal);
       if (evaluation.fits) continue;
       out.push({ date, slot, meal, reason: evaluation.verdict.text, fixes: fixesFor(world, meals, taste, date, slot, meal, today, 4) });

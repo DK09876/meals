@@ -17,6 +17,7 @@
 import { FOODS } from './foods';
 import { scaleServing } from './grocery';
 import { evaluate, isMealType, limitsFor, mealTypeLabel, NOTHING_EATEN, satFatBudget, type Item, type MealType, type Rules } from './rules';
+import { avoidedFoods, avoidedIn, avoidLabel, NO_RESTRICTIONS, withoutCaffeine, type Restrictions } from './restrictions';
 import { makeItFit } from './swaps';
 
 export interface ChatMessage {
@@ -90,6 +91,7 @@ export const ANSWER_SCHEMA = {
 
 export interface PromptContext {
   rules: Rules;
+  restrictions?: Restrictions;
   pantry: string[];
   favourites: string[];
   notForMe: string[];
@@ -99,9 +101,16 @@ export interface PromptContext {
 
 export function systemPrompt(c: PromptContext): string {
   const r = c.rules;
+  const res = c.restrictions ?? NO_RESTRICTIONS;
+  const avoided = avoidedFoods(res);
   const foods = Object.values(FOODS)
+    .filter((f) => !avoided.has(f.id))
     .map((f) => `${f.id}: ${f.name} - 1 serving = ${f.serving} (${f.carbs} g carbs)`)
     .join('\n');
+  const never = [
+    ...res.avoid.map((a) => avoidLabel(a).toLowerCase()),
+    ...(res.noCaffeine ? ['caffeine (coffee, black or green tea, cola, chocolate) - herbal tea and decaf are fine'] : []),
+  ];
   const who = c.grandma ? 'You are talking with her directly - say "you".' : 'You are talking with her family - say "she".';
   return `You help plan meals for an older woman with diabetes and high cholesterol. ${who}
 Be warm, brief and plain: short sentences, no medical advice, no lists of numbers - the app shows the numbers.
@@ -113,6 +122,7 @@ Her plan (the app checks every recipe against it, so stay inside it):
 - Low sodium: at most ${r.sodiumMeal} mg per meal. No added salt; season with herbs, spices, lemon, garlic, ginger, vinegar.
 - Saturated fat at most ${satFatBudget(r)} g a day, cholesterol at most ${r.cholesterolDay} mg a day, at most ${r.yolksWeek} egg yolks a week.
 - Never: fried food, bacon, sausage, deli meats, butter, full-fat cheese, cream, organ meats, sugary drinks, pastries.
+${never.length ? `- She never has: ${never.join('; ')}. Do not suggest them, even as a side or a drink.` : ''}
 
 Recipes may use ONLY these foods, by id, in servings of the size shown (servings can be 0.25, 0.5, 1, 1.5, 2...). Do NOT put herbs, spices, garlic, ginger, lemon, vinegar, water or salt in "items" - mention seasonings in the steps only, and never add salt.
 ${foods}
@@ -197,7 +207,7 @@ export const withLabel = (item: Item): Item => {
 };
 
 /** Checked against her plan as a recipe (any day); fixed if a small swap does it, else dropped. */
-export function vet(recipes: unknown[], rules: Rules): { kept: DraftRecipe[]; dropped: string[] } {
+export function vet(recipes: unknown[], rules: Rules, restrictions: Restrictions = NO_RESTRICTIONS): { kept: DraftRecipe[]; dropped: string[] } {
   const kept: DraftRecipe[] = [];
   const dropped: string[] = [];
   for (const raw of recipes.slice(0, 3)) {
@@ -209,11 +219,18 @@ export function vet(recipes: unknown[], rules: Rules): { kept: DraftRecipe[]; dr
       continue;
     }
     const r = cleaned.recipe;
+    const avoided = avoidedIn(r.items, restrictions);
+    if (avoided) {
+      console.error(`chat: left out ${JSON.stringify(r.name)}: has ${avoided.toLowerCase()}`);
+      dropped.push(r.name);
+      continue;
+    }
+    if (restrictions.noCaffeine) r.steps = r.steps.map(withoutCaffeine).filter(Boolean);
     if (evaluate(r.items, r.type, rules, NOTHING_EATEN).fitsAnyDay) {
       kept.push(r);
       continue;
     }
-    const [fix] = makeItFit(r.items, r.type, rules, NOTHING_EATEN, 1);
+    const [fix] = makeItFit(r.items, r.type, rules, NOTHING_EATEN, 1, avoidedFoods(restrictions));
     if (fix) kept.push({ ...r, items: fix.items.map(withLabel), note: `Changed to fit the plan: ${fix.text.charAt(0).toLowerCase()}${fix.text.slice(1)}.` });
     else {
       console.error(`chat: left out ${JSON.stringify(r.name)}: ${evaluate(r.items, r.type, rules, NOTHING_EATEN).verdict.text}`);
@@ -236,8 +253,10 @@ export async function ask(messages: ChatMessage[], context: PromptContext, model
     }
     const answer = data as { reply?: unknown; recipes?: unknown };
     if (typeof answer?.reply !== 'string') continue;
-    const { kept, dropped } = vet(Array.isArray(answer.recipes) ? answer.recipes : [], context.rules);
-    return { reply: answer.reply.trim().slice(0, 1500), recipes: kept, dropped, model: model.id };
+    const restrictions = context.restrictions ?? NO_RESTRICTIONS;
+    const { kept, dropped } = vet(Array.isArray(answer.recipes) ? answer.recipes : [], context.rules, restrictions);
+    const reply = restrictions.noCaffeine ? withoutCaffeine(answer.reply.trim()) || 'Here are some ideas.' : answer.reply.trim();
+    return { reply: reply.slice(0, 1500), recipes: kept, dropped, model: model.id };
   }
   throw new ChatUnavailable('The recipe helper is busy right now. Try again in a minute.');
 }

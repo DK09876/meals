@@ -26,7 +26,7 @@ export default function RecipesPage() {
 
 function Recipes() {
   const params = useSearchParams();
-  const { state, meals, taste, likes, today } = useData();
+  const { state, meals, taste, likes, today, ruledOutMeals } = useData();
   const admin = useMode() === 'admin';
   const askedType = params.get('type');
   const date = params.get('date');
@@ -99,6 +99,11 @@ function Recipes() {
       <ul className="grid grid-cols-2 gap-x-3 gap-y-5">
         {list.map((m) => <li key={m.id}><RecipeCard meal={m} href={href(m.id)} /></li>)}
       </ul>
+      {filter === 'all' && !q && ruledOutMeals.length > 0 && (
+        <p className="text-center text-sm text-muted">
+          {ruledOutMeals.length} {ruledOutMeals.length === 1 ? 'recipe isn’t' : 'recipes aren’t'} shown because {ruledOutMeals.length === 1 ? 'it has' : 'they have'} {[...new Set(ruledOutMeals.map((r) => r.reason.replace(/^has /, '')))].join(' or ')}.
+        </p>
+      )}
       {!list.length && <p className="py-6 text-center text-muted">{filter === 'favourites' ? 'No favourites yet. Tap ♥ on a recipe, or 👍 after eating one.' : 'No recipes match that.'}</p>}
 
       {admin && (

@@ -23,6 +23,7 @@ import { dayKey } from '@/lib/dates';
 import { contextFrom } from '@/lib/history';
 import type { World } from '@/lib/plan';
 import type { Like, Taste } from '@/lib/rank';
+import { adaptMeals, avoidedFoods, NO_RESTRICTIONS, ruledOut, type Restrictions } from '@/lib/restrictions';
 import type { Context, Item, MealType, Rules } from '@/lib/rules';
 import { useToast } from './Toast';
 
@@ -55,7 +56,9 @@ interface Data {
   setLike: (mealId: string, value: Like | 0) => void;
   setPantry: (foodId: string, on: boolean) => void;
   logMeal: (meal: Meal, afterLog?: () => void) => Promise<void>;
-  saveRules: (changes: Partial<Rules>) => void;
+  saveRules: (changes: Partial<Rules>, restrictions?: Restrictions) => void;
+  /** Built-in or built meals she never has, with why ("has fish"). */
+  ruledOutMeals: Array<{ meal: Meal; reason: string }>;
   addMeal: (type: MealType, items: Item[], extra?: MealExtra) => Promise<Meal | null>;
   deleteMeal: (id: string) => Promise<void>;
   /** null when it was placed; the refusal when it did not fit. */
@@ -179,24 +182,45 @@ export default function DataProvider({ children }: { children: React.ReactNode }
     afterLog?.();
   }, [optimistic, toast]);
 
-  const saveRules = useCallback((changes: Partial<Rules>) => {
+  // Saves to her limits go one at a time, each from the version the one before
+  // it produced - so quick taps on this phone never trip the check meant for
+  // a change made on another phone.
+  const rulesQueue = useRef<Promise<void>>(Promise.resolve());
+  const rulesPending = useRef(0);
+  const saveRules = useCallback((changes: Partial<Rules>, restrictions?: Restrictions) => {
     const before = latest.current;
     if (!before) return;
-    setState({ ...before, rules: { ...before.rules, ...changes } });
+    const next = { ...before, rules: { ...before.rules, ...changes }, restrictions: restrictions ?? before.restrictions };
+    latest.current = next;
+    setState(next);
     writes.current++;
-    api.patchRules(changes, before.rulesUpdatedAt)
-      .then((r) => setState((s) => s && { ...s, rules: r.rules, rulesUpdatedAt: r.rulesUpdatedAt }))
-      .catch((e) => {
+    rulesPending.current++;
+    rulesQueue.current = rulesQueue.current.then(async () => {
+      const base = latest.current?.rulesUpdatedAt ?? before.rulesUpdatedAt;
+      try {
+        const r = await api.patchRules(changes, base, restrictions);
+        rulesPending.current--;
+        // Later taps are still on their way: keep showing them, just move the version on.
+        const settled = rulesPending.current === 0;
+        const apply = (s: api.AppState) => (settled ? { ...s, rules: r.rules, restrictions: r.restrictions, rulesUpdatedAt: r.rulesUpdatedAt } : { ...s, rulesUpdatedAt: r.rulesUpdatedAt });
+        if (latest.current) latest.current = apply(latest.current);
+        setState((s) => s && apply(s));
+      } catch (e) {
+        rulesPending.current--;
         if (e instanceof api.ApiError && e.status === 409) {
-          const body = e.body as { rules: Rules; rulesUpdatedAt: string };
-          setState((s) => s && { ...s, rules: body.rules, rulesUpdatedAt: body.rulesUpdatedAt });
+          const body = e.body as { rules: Rules; restrictions: Restrictions; rulesUpdatedAt: string };
+          const apply = (s: api.AppState) => ({ ...s, rules: body.rules, restrictions: body.restrictions, rulesUpdatedAt: body.rulesUpdatedAt });
+          if (latest.current) latest.current = apply(latest.current);
+          setState((s) => s && apply(s));
           toast('Her plan was just changed on another phone. Showing the latest - try again if needed.');
         } else {
-          setState((s) => s && { ...s, rules: before.rules, rulesUpdatedAt: before.rulesUpdatedAt });
+          setState((s) => s && { ...s, rules: before.rules, restrictions: before.restrictions, rulesUpdatedAt: s.rulesUpdatedAt });
           toast(message(e));
         }
-      })
-      .finally(() => { writes.current--; });
+      } finally {
+        writes.current--;
+      }
+    });
   }, [toast]);
 
   const addMeal = useCallback(async (type: MealType, items: Item[], extra: MealExtra = {}) => {
@@ -256,17 +280,25 @@ export default function DataProvider({ children }: { children: React.ReactNode }
   }, [refresh, toast]);
 
   const value = useMemo<Data>(() => {
-    const meals = [...CATALOG, ...(state?.custom ?? [])];
-    const byId = new Map(meals.map((m) => [m.id, m]));
+    const all = [...CATALOG, ...(state?.custom ?? [])];
+    const restrictions = state?.restrictions ?? NO_RESTRICTIONS;
+    // Only what she can have is offered, adapted ("made without mushrooms"); anything
+    // planned or eaten before keeps its stored form so history still reads right.
+    const meals = adaptMeals(all, restrictions);
+    const adapted = new Map(meals.map((m) => [m.id, m]));
+    const stored = new Map(all.map((m) => [m.id, m]));
+    const lookup = (id: string) => adapted.get(id) ?? stored.get(id);
+    const ruledOutMeals = all.filter((m) => !adapted.has(m.id)).map((m) => ({ meal: m, reason: ruledOut(m, restrictions) ?? '' }));
     const likes = new Map(Object.entries(state?.likes ?? {})) as Map<string, Like>;
     const pantry = new Set(state?.pantry ?? []);
     return {
       state,
       error,
       meals,
-      mealById: (id) => byId.get(id),
+      mealById: lookup,
+      ruledOutMeals,
       context: contextFrom(state?.log ?? [], now),
-      world: state ? { plan: state.plan, log: state.log, rules: state.rules, meal: (id) => byId.get(id) } : null,
+      world: state ? { plan: state.plan, log: state.log, rules: state.rules, meal: lookup, ruledOut: (id) => (adapted.has(id) || !stored.has(id) ? null : ruledOut(stored.get(id)!, restrictions)), avoided: avoidedFoods(restrictions) } : null,
       taste: { likes, log: state?.log ?? [], pantry, now },
       now,
       today: dayKey(now),

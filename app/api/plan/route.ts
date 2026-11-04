@@ -32,6 +32,11 @@ export async function PUT(request: Request) {
   if (!meal) return bad('No such meal', 404);
   if (meal.type !== body.slot) return bad(`That is a ${meal.type} recipe`);
   const { world, meals, taste } = loadWorld(who.profile);
+  const avoided = world.ruledOut?.(meal.id);
+  if (avoided) {
+    const alt = alternatives(world, meals, taste, body.date, body.slot, meal, isDayKey(body.weekStart) ? body.weekStart : body.date);
+    return NextResponse.json({ error: `That ${avoided}, which she doesn't eat`, instead: alt.instead.map((m) => m.id), otherDays: [] }, { status: 422 });
+  }
   const evaluation = checkSlot(world, body.date, body.slot, meal);
   if (!evaluation.fits && !(body.force === true && isAdmin(request))) {
     const weekStart = isDayKey(body.weekStart) ? body.weekStart : body.date;

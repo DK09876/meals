@@ -12,6 +12,7 @@ import AdminGate from '@/components/AdminGate';
 import { useData } from '@/components/DataProvider';
 import { CarbMeter, Chips, Icon, Segmented, Verdict } from '@/components/ui';
 import { foodsIn, GROUPS } from '@/lib/foods';
+import { avoidedFoods } from '@/lib/restrictions';
 import { fraction } from '@/lib/format';
 import { evaluate, isMealType, MEAL_TYPES, type Item, type MealType } from '@/lib/rules';
 import { mealTypeAt } from '@/lib/suggest';
@@ -55,7 +56,8 @@ function Build() {
       {!empty && <Chips checks={e.checks} />}
 
       {GROUPS.map((g) => {
-        const foods = foodsIn(g.id);
+        const avoided = avoidedFoods(state.restrictions);
+        const foods = foodsIn(g.id).filter((f) => !avoided.has(f.id));
         const added = foods.filter((f) => plate[f.id] > 0).length;
         const isOpen = open === g.id;
         return (

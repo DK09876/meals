@@ -28,6 +28,7 @@ import { Database } from 'node-sqlite3-wasm';
 
 import { catalogMeal, type Meal } from './catalog';
 import type { LogEntry } from './history';
+import { cleanRestrictions, NO_RESTRICTIONS, type Restrictions } from './restrictions';
 import { DEFAULT_RULES, RULE_KEYS, type Item, type MealType, type Rules } from './rules';
 
 const DB_PATH = process.env.MEALS_DB_PATH || `${process.cwd()}/data/meals.db`;
@@ -87,6 +88,10 @@ function open(): Database {
   db.run(`CREATE TABLE IF NOT EXISTS plan (profileId TEXT NOT NULL, date TEXT NOT NULL, slot TEXT NOT NULL, mealId TEXT NOT NULL, updatedAt TEXT NOT NULL, PRIMARY KEY (profileId, date, slot))`);
   db.run(`CREATE TABLE IF NOT EXISTS photos (mealId TEXT PRIMARY KEY, file TEXT NOT NULL, mime TEXT NOT NULL, credit TEXT NOT NULL DEFAULT '', license TEXT NOT NULL DEFAULT '', page TEXT NOT NULL DEFAULT '', updatedAt TEXT NOT NULL)`);
   db.run(`CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
+  // "Never use" and no caffeine (2026-11-03), versioned with her limits.
+  if (!(db.all('PRAGMA table_info(profiles)') as Array<{ name: string }>).some((c) => c.name === 'restrictions')) {
+    db.run(`ALTER TABLE profiles ADD COLUMN restrictions TEXT NOT NULL DEFAULT '{"avoid":[],"noCaffeine":false}'`);
+  }
   db.run(`CREATE TABLE IF NOT EXISTS admin_sessions (tokenHash TEXT PRIMARY KEY, createdAt TEXT NOT NULL, expiresAt TEXT NOT NULL)`);
   // The testing phase (2026-11-02): what people say about the app, with where they were.
   db.run(`
@@ -158,30 +163,33 @@ export function createProfile(name: string): Profile {
 
 export interface RulesRecord {
   rules: Rules;
+  restrictions: Restrictions;
   updatedAt: string;
 }
 
 export function getRules(profileId: string): RulesRecord {
-  const row = open().get('SELECT rules, rulesUpdatedAt FROM profiles WHERE id = ?', [profileId]) as { rules: string; rulesUpdatedAt: string };
+  const row = open().get('SELECT rules, restrictions, rulesUpdatedAt FROM profiles WHERE id = ?', [profileId]) as { rules: string; restrictions: string; rulesUpdatedAt: string };
+  const restrictions = cleanRestrictions(JSON.parse(row.restrictions || '{}')) ?? NO_RESTRICTIONS;
   // Rules added after a profile was made take their defaults; retired ones
   // (the per-meal saturated fat limit, replaced 2026-10-27 by her handout's
   // 5% of calories) are dropped.
   const stored = JSON.parse(row.rules) as Record<string, number>;
   const rules = { ...DEFAULT_RULES };
   for (const key of RULE_KEYS) if (typeof stored[key] === 'number') rules[key] = stored[key];
-  return { rules, updatedAt: row.rulesUpdatedAt };
+  return { rules, restrictions, updatedAt: row.rulesUpdatedAt };
 }
 
 export type PatchResult = { ok: true; record: RulesRecord } | { ok: false; record: RulesRecord };
 
 /** Applies a change made from version `base`; refused if her limits have changed since. */
-export function patchRules(profileId: string, changes: Partial<Rules>, base: string): PatchResult {
+export function patchRules(profileId: string, changes: Partial<Rules>, base: string, restrictions?: Restrictions): PatchResult {
   const current = getRules(profileId);
   if (current.updatedAt !== base) return { ok: false, record: current };
   const rules = { ...current.rules, ...changes };
+  const next = restrictions ?? current.restrictions;
   const updatedAt = stamp();
-  open().run('UPDATE profiles SET rules = ?, rulesUpdatedAt = ? WHERE id = ?', [JSON.stringify(rules), updatedAt, profileId]);
-  return { ok: true, record: { rules, updatedAt } };
+  open().run('UPDATE profiles SET rules = ?, restrictions = ?, rulesUpdatedAt = ? WHERE id = ?', [JSON.stringify(rules), JSON.stringify(next), updatedAt, profileId]);
+  return { ok: true, record: { rules, restrictions: next, updatedAt } };
 }
 
 // --- favourites and at-home ----------------------------------------------

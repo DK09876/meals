@@ -117,6 +117,27 @@ export const CATALOG: Meal[] = [
     note: 'Jarred pasta sauce can carry 400+ mg of sodium; fresh tomatoes keep it low.',
   },
 
+  {
+    id: 'turkey-chili', type: 'dinner', photo: 'turkey chili beans', name: 'Turkey & bean chili', minutes: 35,
+    items: [i('groundturkey', 1, '3 oz lean ground turkey'), i('kidneybeans', 0.75, '⅓ cup cooked kidney beans'), i('cannedtomato', 1, '½ cup no-salt-added tomatoes'), i('peppers', 1, '½ cup peppers'), i('onion', 1, '½ cup onion'), i('oliveoil', 1, '1 tsp olive oil')],
+    steps: ['Brown the turkey with onion and peppers in the oil.', 'Add tomatoes, beans, cumin, chili powder and garlic.', 'Simmer 20 minutes. No salt; a squeeze of lime at the end.'],
+  },
+  {
+    id: 'chicken-kebabs', type: 'dinner', photo: 'chicken vegetable kebab skewers', name: 'Chicken & vegetable kebabs with quinoa', minutes: 30,
+    items: [i('chicken', 1, '3 oz chicken breast, cubed'), i('peppers', 1, '½ cup peppers'), i('zucchini', 1, '½ cup zucchini'), i('onion', 1, '½ cup onion'), i('quinoa', 1, '⅓ cup quinoa'), i('oliveoil', 1, '1 tsp olive oil')],
+    steps: ['Toss chicken and vegetables with the oil, lemon, garlic and paprika.', 'Thread onto skewers and grill or bake at 425°F for 15 minutes.', 'Serve with the quinoa.'],
+  },
+  {
+    id: 'pork-sweet-potato', type: 'dinner', photo: 'pork tenderloin sweet potato green beans', name: 'Pork tenderloin, sweet potato & green beans', minutes: 35,
+    items: [i('pork', 1, '3 oz pork tenderloin'), i('sweetpot', 1, '½ cup sweet potato'), i('greenbeans', 2, '1 cup green beans'), i('oliveoil', 1, '1 tsp olive oil')],
+    steps: ['Rub the pork with garlic, rosemary and pepper; roast at 400°F for 20–25 minutes.', 'Roast the sweet potato alongside.', 'Steam the green beans and toss with the oil.'],
+  },
+  {
+    id: 'moong-dal-spinach', type: 'lunch', photo: 'moong dal', name: 'Moong dal with spinach', minutes: 30,
+    items: [i('mungbeans', 1, '½ cup cooked moong dal'), i('spinach', 1, '1 cup spinach'), i('cannedtomato', 1, '½ cup no-salt-added tomatoes'), i('oliveoil', 1, '1 tsp oil')],
+    steps: ['Simmer the dal with turmeric until soft.', 'Fry cumin seeds, garlic and ginger in the oil; add tomatoes, then the spinach.', 'Stir into the dal. Lemon instead of salt.'],
+  },
+
   // --- snacks: always a carb with a protein or fat -------------------------
   {
     id: 'apple-pb', photo: 'apple peanut butter', type: 'snack', name: 'Apple & peanut butter', minutes: 2,

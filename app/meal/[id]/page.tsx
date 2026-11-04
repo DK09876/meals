@@ -29,6 +29,7 @@ import { useMode } from '@/lib/mode';
 import { eatenFor, slotContext } from '@/lib/plan';
 import { evaluate, isMealType, mealTypeLabel, satFatBudget, type Status } from '@/lib/rules';
 import { makeItFit } from '@/lib/swaps';
+import { avoidedFoods } from '@/lib/restrictions';
 
 export default function MealPage() {
   return <Suspense><Recipe /></Suspense>;
@@ -63,7 +64,7 @@ function Recipe() {
   const checkDate = at?.date ?? today;
   const context = slotContext(world, checkDate, meal.type);
   const e = evaluate(meal.items, meal.type, state.rules, context);
-  const fixes = e.fits ? [] : makeItFit(meal.items, meal.type, state.rules, context);
+  const fixes = e.fits ? [] : makeItFit(meal.items, meal.type, state.rules, context, 3, avoidedFoods(state.restrictions));
   const t = e.totals;
   const fav = likes.get(meal.id) === 1;
   const photo = state.photos[meal.id];

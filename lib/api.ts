@@ -7,6 +7,7 @@ import type { Meal } from './catalog';
 import type { LogEntry } from './history';
 import { getProfile, type Profile } from './profile';
 import type { PlanEntry } from './plan';
+import type { Restrictions } from './restrictions';
 import type { Item, MealType, Rules } from './rules';
 
 export interface PhotoInfo { v: string; credit: string; license: string; page: string }
@@ -14,6 +15,7 @@ export interface PhotoInfo { v: string; credit: string; license: string; page: s
 export interface AppState {
   profile: Profile;
   rules: Rules;
+  restrictions: Restrictions;
   rulesUpdatedAt: string;
   likes: Record<string, 1 | -1>;
   plan: PlanEntry[];
@@ -63,8 +65,8 @@ export async function fetchState(): Promise<{ state: AppState; build: string | n
   return { state: await json<AppState>(response), build: response.headers.get('x-meals-build') };
 }
 
-export const patchRules = (changes: Partial<Rules>, base: string) =>
-  send<{ rules: Rules; rulesUpdatedAt: string }>('rules', 'PATCH', { changes, base });
+export const patchRules = (changes: Partial<Rules>, base: string, restrictions?: Restrictions) =>
+  send<{ rules: Rules; restrictions: Restrictions; rulesUpdatedAt: string }>('rules', 'PATCH', { changes, base, ...(restrictions ? { restrictions } : {}) });
 
 export const setLike = (mealId: string, value: 1 | 0 | -1) => send<{ ok: true }>('likes', 'PUT', { mealId, value });
 export const setSlot = (date: string, slot: MealType, mealId: string | null, opts: { force?: boolean; weekStart?: string } = {}) =>

@@ -24,11 +24,12 @@ export async function GET(request: Request) {
   const who = requireProfile(request);
   if (who instanceof NextResponse) return who;
   ensurePhotos();
-  const { rules, updatedAt } = getRules(who.profile);
+  const { rules, restrictions, updatedAt } = getRules(who.profile);
   return NextResponse.json(
     {
       profile: listProfiles().find((p) => p.id === who.profile),
       rules,
+      restrictions,
       rulesUpdatedAt: updatedAt,
       likes: listLikes(who.profile),
       plan: listPlan(who.profile, addDays(dayKey(new Date()), -14)),

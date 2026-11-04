@@ -27,7 +27,12 @@ export interface World {
   plan: PlanEntry[];
   log: LogEntry[];
   rules: Rules;
+  /** The meal as she has it (adapted to "Never use"), or as stored when it is ruled out. */
   meal: (id: string) => Meal | undefined;
+  /** Why she never has this meal ("has fish"), or null. */
+  ruledOut?: (id: string) => string | null;
+  /** Foods she never has; fixes never add them. */
+  avoided?: ReadonlySet<string>;
 }
 
 const SLOTS = MEAL_TYPES.map((t) => t.id);
