@@ -114,7 +114,7 @@ Her plan (the app checks every recipe against it, so stay inside it):
 - Saturated fat at most ${satFatBudget(r)} g a day, cholesterol at most ${r.cholesterolDay} mg a day, at most ${r.yolksWeek} egg yolks a week.
 - Never: fried food, bacon, sausage, deli meats, butter, full-fat cheese, cream, organ meats, sugary drinks, pastries.
 
-Recipes may use ONLY these foods, by id, in servings of the size shown (servings can be 0.25, 0.5, 1, 1.5, 2...). Herbs, spices, lemon, garlic, ginger and vinegar can go in the steps without being listed.
+Recipes may use ONLY these foods, by id, in servings of the size shown (servings can be 0.25, 0.5, 1, 1.5, 2...). Do NOT put herbs, spices, garlic, ginger, lemon, vinegar, water or salt in "items" - mention seasonings in the steps only, and never add salt.
 ${foods}
 
 ${c.pantry.length ? `At home now: ${c.pantry.join(', ')}. Prefer these when it makes sense.` : ''}
@@ -141,6 +141,15 @@ const ALIASES: Map<string, string> = (() => {
   return m;
 })();
 
+/**
+ * Seasonings that add nothing her plan counts - a model often lists them as
+ * ingredients even when told not to. They move to the steps instead of
+ * sinking the recipe. Salt is the exception: her plan says no added salt.
+ */
+const SEASONING = /^(fresh |ground |minced |chopped |dried |a pinch of |pinch of )*(garlic|ginger|lemons?|limes?|lemon juice|lime juice|lemon zest|vinegar|water|ice|herbs?|cilantro|coriander( leaves| seeds?)?|parsley|basil|dill|mint|rosemary|thyme|oregano|bay leaf|bay leaves|chives|scallion greens|cumin( seeds?)?|turmeric|paprika|smoked paprika|chil(l)?i( flakes| powder)?|red pepper flakes|cayenne|(black )?pepper|peppercorns|garam masala|curry powder|curry leaves|mustard seeds?|fennel seeds?|cinnamon|nutmeg|cardamom|cloves?|asafoetida|hing|fenugreek( leaves| seeds)?|methi|ajwain|nutritional yeast|spices?|seasoning|salt-free seasoning|garlic powder|onion powder|ginger powder|vanilla( extract)?)$/;
+export const isSeasoning = (raw: string) => SEASONING.test(norm(raw).replace(/\s+(to taste|as needed)$/, ''));
+export const isSalt = (raw: string) => /\bsalt\b/.test(norm(raw)) && !/salt.?free|no salt|unsalted/.test(raw.toLowerCase());
+
 /** The food a model meant: its id, or a name we can be sure of. Unknown stays unknown - no guessing at numbers. */
 export function resolveFood(raw: string): string | null {
   if (FOODS[raw]) return raw;
@@ -156,7 +165,13 @@ function clean(raw: unknown): { recipe: Omit<DraftRecipe, 'note'> } | { problem:
   if (!isMealType(type)) return { problem: `meal type ${JSON.stringify(r.type)}` };
   if (!Array.isArray(r.items) || !r.items.length) return { problem: 'no items' };
   const items: Item[] = [];
+  const seasonings: string[] = [];
+  let saltLeftOut = false;
   for (const it of r.items as Array<{ food?: unknown; servings?: unknown }>) {
+    if (typeof it?.food === 'string' && !resolveFood(it.food)) {
+      if (isSalt(it.food)) { saltLeftOut = true; continue; }
+      if (isSeasoning(it.food)) { seasonings.push(norm(it.food)); continue; }
+    }
     const food = typeof it?.food === 'string' ? resolveFood(it.food) : null;
     const amount = typeof it?.servings === 'string' ? Number(it.servings) : it?.servings;
     if (!food) return { problem: `unknown food ${JSON.stringify(it?.food)}` };
@@ -166,7 +181,12 @@ function clean(raw: unknown): { recipe: Omit<DraftRecipe, 'note'> } | { problem:
     if (existing) existing.servings += servings;
     else items.push({ food, servings });
   }
+  if (!items.length) return { problem: 'only seasonings' };
   const steps = Array.isArray(r.steps) ? r.steps.filter((s): s is string => typeof s === 'string' && !!s.trim()).map((s) => s.trim().slice(0, 300)).slice(0, 8) : [];
+  const said = steps.join(' ').toLowerCase();
+  const unmentioned = [...new Set(seasonings)].filter((x) => !said.includes(x));
+  if (unmentioned.length) steps.push(`Season with ${unmentioned.join(', ')}.`);
+  if (saltLeftOut) steps.push('No added salt - her plan is low sodium.');
   const minutes = typeof r.minutes === 'number' && r.minutes > 0 && r.minutes < 300 ? Math.round(r.minutes) : null;
   return { recipe: { name: r.name.trim().slice(0, 60), type, minutes, items: items.map(withLabel), steps } };
 }

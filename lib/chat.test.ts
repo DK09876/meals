@@ -63,6 +63,31 @@ describe('resolveFood', () => {
   });
 });
 
+describe('seasonings a model lists as ingredients', () => {
+  it('moves them to the steps instead of leaving the recipe out', () => {
+    const { kept, dropped } = vet([{ ...dal, items: [...dal.items, { food: 'garlic', servings: 1 }, { food: 'Lemon juice', servings: 0.5 }, { food: 'ground cumin', servings: 0.25 }] }], DEFAULT_RULES);
+    expect(dropped).toEqual([]);
+    expect(kept[0].items.map((i) => i.food)).toEqual(['mungbeans', 'okra', 'oliveoil']);
+    expect(kept[0].steps.at(-1)).toBe('Season with garlic, lemon juice, ground cumin.');
+  });
+
+  it('does not repeat a seasoning the steps already mention', () => {
+    const { kept } = vet([{ ...dal, steps: ['Fry the garlic.'], items: [...dal.items, { food: 'garlic', servings: 1 }] }], DEFAULT_RULES);
+    expect(kept[0].steps).toEqual(['Fry the garlic.']);
+  });
+
+  it('leaves salt out and says so', () => {
+    const { kept } = vet([{ ...dal, items: [...dal.items, { food: 'salt', servings: 0.25 }] }], DEFAULT_RULES);
+    expect(kept[0].items.map((i) => i.food)).not.toContain('salt');
+    expect(kept[0].steps.at(-1)).toBe('No added salt - her plan is low sodium.');
+  });
+
+  it('still leaves out real foods it cannot check', () => {
+    expect(vet([{ ...dal, name: 'Paneer dal', items: [...dal.items, { food: 'paneer', servings: 1 }] }], DEFAULT_RULES).dropped).toEqual(['Paneer dal']);
+    expect(vet([{ ...dal, name: 'Ghee dal', items: [...dal.items, { food: 'ghee', servings: 1 }] }], DEFAULT_RULES).dropped).toEqual(['Ghee dal']);
+  });
+});
+
 describe('ask', () => {
   it('uses the first model that answers', async () => {
     const a = fake('a', new Error('busy'));
