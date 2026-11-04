@@ -379,6 +379,46 @@ describe('testing phase and feedback', () => {
   });
 });
 
+describe('never use', () => {
+  const HERS = { avoid: ['fish', 'mushrooms', 'olives'], noCaffeine: true };
+
+  it('saves with her limits, versioned the same way', async () => {
+    const r = await setup();
+    const { rulesUpdatedAt } = await state(r);
+    expect((await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { restrictions: HERS, base: rulesUpdatedAt }, false))).status).toBe(403);
+    expect((await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { restrictions: { avoid: ['broccoli'], noCaffeine: false }, base: rulesUpdatedAt }))).status).toBe(400);
+    // Exactly what the phone sends: no limit changes, the new list.
+    expect((await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { changes: {}, restrictions: HERS, base: rulesUpdatedAt }))).status).toBe(200);
+    const s = await state(r);
+    expect(s.restrictions).toEqual(HERS);
+    expect((await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { restrictions: { avoid: [], noCaffeine: false }, base: rulesUpdatedAt }))).status).toBe(409);
+  });
+
+  it('refuses a fish dinner on her week, and a built meal with fish', async () => {
+    const r = await setup();
+    const { rulesUpdatedAt } = await state(r);
+    await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { restrictions: HERS, base: rulesUpdatedAt }));
+    const res = await r.plan.PUT(req(`plan?${P}`, 'PUT', { date: dayKey(new Date()), slot: 'dinner', mealId: 'salmon-rice-broccoli' }, false));
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.error).toBe("That has fish, which she doesn't eat");
+    expect(body.instead.length).toBeGreaterThan(0);
+    const built = await r.meals.POST(req(`meals?${P}`, 'POST', { type: 'dinner', items: [{ food: 'cod', servings: 1 }, { food: 'quinoa', servings: 1 }, { food: 'broccoli', servings: 2 }] }));
+    expect((await built.json()).error).toBe("That has fish, which she doesn't eat");
+  });
+
+  it('fills her week without fish, mushrooms or olives', async () => {
+    const r = await setup();
+    const { rulesUpdatedAt } = await state(r);
+    await r.rules.PATCH(req(`rules?${P}`, 'PATCH', { restrictions: HERS, base: rulesUpdatedAt }));
+    await r.plan.POST(req(`plan?${P}`, 'POST', { action: 'fill', start: dayKey(new Date()) }, false));
+    const ids = (await state(r)).plan.map((p: { mealId: string }) => p.mealId);
+    expect(ids).toHaveLength(28);
+    expect(ids).not.toContain('salmon-rice-broccoli');
+    expect(ids).not.toContain('lemon-cod-asparagus');
+  });
+});
+
 describe('build id', () => {
   it('tells the page which build the server is on', async () => {
     vi.stubEnv('NEXT_PUBLIC_MEALS_BUILD', 'b-123');

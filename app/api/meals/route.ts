@@ -12,6 +12,7 @@ import { NextResponse } from 'next/server';
 
 import { addCustomMeal, customMealCount, getRules } from '@/lib/db';
 import { isFood } from '@/lib/foods';
+import { avoidedIn } from '@/lib/restrictions';
 import { fetchCommonsImage, findPhoto, storePhoto } from '@/lib/photos';
 import { bad, readJson, requireProfile } from '@/lib/profile-route';
 import { evaluate, isMealType, mealTypeLabel, type Item } from '@/lib/rules';
@@ -42,7 +43,10 @@ export async function POST(request: Request) {
   if (!isMealType(body.type)) return bad('Pick breakfast, lunch, dinner or snack');
   const items = cleanItems(body.items);
   if (!items) return bad('Those foods or amounts are not right');
-  const evaluation = evaluate(items, body.type, getRules(who.profile).rules);
+  const { rules, restrictions } = getRules(who.profile);
+  const avoided = avoidedIn(items, restrictions);
+  if (avoided) return bad(`That has ${avoided.toLowerCase()}, which she doesn't eat`);
+  const evaluation = evaluate(items, body.type, rules);
   if (!evaluation.fitsAnyDay) return bad(evaluation.verdict.text);
   const given = typeof body.name === 'string' ? body.name.trim().replace(/\s+/g, ' ').slice(0, 60) : '';
   const name = given || `My ${mealTypeLabel(body.type).toLowerCase()} plate ${customMealCount(who.profile) + 1}`;

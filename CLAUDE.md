@@ -58,3 +58,10 @@ guess supply nutrition values.
   note, with the screen path). Admin Settings → Testing phase reads feedback
   and turns it off. Read it on the Pi with
   `sqlite3 data/meals.db "SELECT createdAt, kind, path, text FROM feedback ORDER BY createdAt DESC"`.
+- "Never use" (`lib/restrictions.ts`) is per person, saved with her limits
+  (same version / 409). Meals with an avoided side are adapted (stand-in from
+  the same group, with a note); meals built around one are ruled out
+  everywhere - suggestions, plan PUT (422), built meals, chat, make-it-fit.
+  No caffeine: chat steps/replies lose any sentence offering it.
+- Saves to her limits are queued per phone (DataProvider `rulesQueue`) so
+  quick taps never trip the other-phone 409.

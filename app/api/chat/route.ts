@@ -59,8 +59,10 @@ export async function POST(request: Request) {
   const name = (id: string) => [...CATALOG, ...listCustomMeals(who.profile)].find((m) => m.id === id)?.name;
   const named = (v: 1 | -1) => Object.entries(likes).filter(([, x]) => x === v).map(([id]) => name(id)).filter((n): n is string => !!n).slice(0, 15);
   try {
+    const { rules, restrictions } = getRules(who.profile);
     const answer = await ask(messages, {
-      rules: getRules(who.profile).rules,
+      rules,
+      restrictions,
       pantry: listPantry(who.profile).map((id) => FOODS[id]?.name).filter((n): n is string => !!n),
       favourites: named(1),
       notForMe: named(-1),

@@ -95,14 +95,15 @@ function changes(items: Item[]): Change[] {
 
 const key = (items: Item[]) => items.map((i) => `${i.food}:${i.servings}`).sort().join(',');
 
-export function makeItFit(items: Item[], type: MealType, rules: Rules, context: Context, limit = 3): Fix[] {
+/** `avoid`: foods she never has - no fix may add or swap one in. */
+export function makeItFit(items: Item[], type: MealType, rules: Rules, context: Context, limit = 3, avoid: ReadonlySet<string> = new Set()): Fix[] {
   const start = items.map(({ food, servings }) => ({ food, servings }));
   if (evaluate(start, type, rules, context).fits) return [];
   const seen = new Set([key(start)]);
   const fits: Fix[] = [];
   const singles = changes(start);
   const tryFix = (text: string, next: Item[]) => {
-    if (!next.length) return;
+    if (!next.length || next.some((i) => avoid.has(i.food) && !start.some((s) => s.food === i.food))) return;
     const k = key(next);
     if (seen.has(k)) return;
     seen.add(k);

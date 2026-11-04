@@ -93,6 +93,6 @@ describe('ranked', () => {
       likes: new Map([['chicken-quinoa-salad', 1], ['lentil-spinach-soup', -1]]),
       log: [{ id: 'x', mealId: 'turkey-avocado-wrap', name: '', type: 'lunch', items: [], eatenAt: new Date(2026, 10, 1, 12).toISOString() }],
     };
-    expect(ranked(lunches, t).map((m) => m.id)).toEqual(['chicken-quinoa-salad', 'chicken-veg-pasta-soup', 'turkey-avocado-wrap']);
+    expect(ranked(lunches, t).map((m) => m.id)).toEqual(['chicken-quinoa-salad', 'chicken-veg-pasta-soup', 'moong-dal-spinach', 'turkey-avocado-wrap']);
   });
 });

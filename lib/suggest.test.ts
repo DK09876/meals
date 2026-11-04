@@ -11,7 +11,7 @@ const ids = (list: ReturnType<typeof ideas>) => list.map((i) => i.meal.id);
 
 describe('ideas', () => {
   it('offers only meals of the type asked for, in catalog order', () => {
-    expect(ids(ideas(CATALOG, { ...base, type: 'lunch' }))).toEqual(['turkey-avocado-wrap', 'lentil-spinach-soup', 'chicken-quinoa-salad', 'chicken-veg-pasta-soup']);
+    expect(ids(ideas(CATALOG, { ...base, type: 'lunch' }))).toEqual(['turkey-avocado-wrap', 'lentil-spinach-soup', 'chicken-quinoa-salad', 'chicken-veg-pasta-soup', 'moong-dal-spinach']);
   });
 
   it('drops a meal that would go over this week\'s egg yolks', () => {
